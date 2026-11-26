@@ -1,0 +1,2659 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VACE / COPQ Evaluation System</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font: Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- SheetJS for Excel Import/Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Hide browser's native password reveal icon
+           to avoid duplicate eye buttons */
+        input[type="password"]::-ms-reveal,
+        input[type="password"]::-ms-clear {
+            display: none;
+        }
+
+        /* Improve touch interaction on mobile */
+        .password-toggle {
+            min-width: 44px;
+            min-height: 44px;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+
+        .password-toggle i {
+            font-size: 16px;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f1f5f9;
+            -webkit-tap-highlight-color: transparent;
+        }
+        @keyframes shakeField {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .shake-error {
+            animation: shakeField 0.35s ease-in-out;
+        }
+        /* SEND progress bar */
+        #send-progress-bar {
+            transition: width 0.35s ease;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-blue-600 selection:text-white">
+
+    <!-- SEND Progress Overlay -->
+    <div id="send-progress-overlay"
+         class="fixed inset-0 z-[100] hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
+
+            <div class="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-4">
+                <i class="fa-solid fa-cloud-arrow-up text-xl"></i>
+            </div>
+
+            <h3 class="text-lg font-extrabold text-slate-900">
+                Đang gửi đánh giá/리뷰 등록 중...
+            </h3>
+
+            <p id="send-progress-message"
+               class="text-sm text-slate-500 mt-2">
+                Đang chuẩn bị dữ liệu...
+            </p>
+
+            <div class="flex justify-between items-center mt-5 mb-2">
+                <span class="text-xs font-semibold text-slate-500">
+                    Tiến trình
+                </span>
+
+                <span id="send-progress-percent"
+                      class="text-sm font-extrabold text-blue-600">
+                    0%
+                </span>
+            </div>
+
+            <div class="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
+                <div id="send-progress-bar"
+                     class="h-full bg-blue-600 rounded-full"
+                     style="width: 0%">
+                </div>
+            </div>
+
+            <p class="text-xs text-slate-400 mt-4">
+                Vui lòng không đóng trang trong khi gửi.
+            </p>
+
+        </div>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="fixed top-4 right-4 left-4 sm:left-auto sm:w-96 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- Custom Modal Dialog (Replaces alert & confirm) -->
+    <div id="app-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100">
+            <div class="flex items-start gap-3.5 mb-4">
+                <div id="modal-badge" class="w-11 h-11 rounded-2xl flex items-center justify-center text-lg shrink-0 bg-blue-100 text-blue-600">
+                    <i id="modal-icon" class="fa-solid fa-circle-info"></i>
+                </div>
+                <div>
+                    <h3 id="modal-title" class="text-lg font-extrabold text-slate-900">Thông báo</h3>
+                    <p id="modal-message" class="text-sm text-slate-600 mt-1 leading-relaxed"></p>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2.5 mt-6">
+                <button type="button" id="modal-cancel-btn" class="hidden px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition">
+                    Hủy
+                </button>
+                <button type="button" id="modal-confirm-btn" class="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition">
+                    Đồng ý
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 1: LOGIN SCREEN                                                -->
+    <!-- ===================================================================== -->
+    <section id="login-screen" class="min-h-screen flex flex-col justify-center items-center p-4 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+        <div class="w-full max-w-md">
+            <!-- Top Language Selector Bar -->
+            <div class="flex justify-end mb-3">
+                <div class="inline-flex items-center gap-1 bg-white/10 backdrop-blur-md p-1 rounded-full border border-white/15 shadow-sm" role="group" aria-label="Language Selector">
+                    <button type="button" data-action="set-lang" data-lang="vi" class="lang-pill px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1">
+                        <span>🇻🇳</span><span>VI</span>
+                    </button>
+                    <button type="button" data-action="set-lang" data-lang="ko" class="lang-pill px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1">
+                        <span>🇰🇷</span><span>KO</span>
+                    </button>
+                    <button type="button" data-action="set-lang" data-lang="en" class="lang-pill px-2.5 py-1 rounded-full text-xs font-bold transition flex items-center gap-1">
+                        <span>🇺🇸</span><span>EN</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Header -->
+            <div class="text-center mb-6">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/30 mb-3">
+                    <i class="fa-solid fa-award text-2xl"></i>
+                </div>
+                
+                <h1 class="text-lg sm:text-2xl font-extrabold text-white tracking-tight leading-tight">
+                    VACE-COPQ EVALUATION SYSTEM
+                </h1>
+
+                <p data-i18n="loginSubtitle" class="text-blue-200 text-xs sm:text-sm mt-2">
+                    Hệ thống đánh giá điểm & xếp hạng dự án COPQ
+                </p>
+            </div>
+
+            <!-- Login Card -->
+            <div class="bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden">
+                <!-- Role Tabs -->
+                <div class="grid grid-cols-2 gap-1.5 bg-slate-100 p-1.5 m-4 rounded-2xl">
+                    <button type="button" id="tab-evaluator-btn" class="py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-blue-700 shadow-sm transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-user-pen"></i>
+                        <span data-i18n="tabEvaluator">Người đánh giá</span>
+                    </button>
+                    <button type="button" id="tab-admin-btn" class="py-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-shield-halved"></i>
+                        <span data-i18n="tabAdmin">Quản trị (Admin)</span>
+                    </button>
+                </div>
+
+                <!-- Evaluator Login Form -->
+                <form id="evaluator-login-form" class="px-6 pb-6 pt-1 space-y-4">
+                    <div>
+                        <label for="common-password-input" data-i18n="labelCommonPass" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                            Mật khẩu chung người đánh giá
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 pointer-events-none">
+                                <i class="fa-solid fa-lock"></i>
+                            </span>
+
+                            <input
+                                type="password"
+                                id="common-password-input"
+                                autocomplete="current-password"
+                                data-i18n-placeholder="phCommonPass"
+                                placeholder="Nhập mật khẩu chung..."
+                                class="w-full pl-11 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                            >
+
+                            <button
+                                type="button"
+                                class="password-toggle absolute inset-y-0 right-0 w-12 flex items-center justify-center text-slate-400 hover:text-blue-600 active:text-blue-700"
+                                data-target="common-password-input"
+                                aria-label="Hiện mật khẩu"
+                                aria-pressed="false"
+                            >
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" id="evaluator-submit-btn" class="w-full py-3.5 px-5 bg-blue-600 hover:bg-blue-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-blue-600/25 transition flex items-center justify-center gap-2">
+                        <span data-i18n="btnEnterEval">VÀO CHẤM ĐIỂM</span>
+                        <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+
+                <!-- Admin Login Form -->
+                <form id="admin-login-form" class="hidden px-6 pb-6 pt-1 space-y-4">
+                    <div>
+                        <label for="admin-password-input" data-i18n="labelAdminPass" class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                            Mật khẩu quản trị viên (Admin)
+                        </label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-4 flex items-center text-slate-400 pointer-events-none">
+                                <i class="fa-solid fa-key"></i>
+                            </span>
+
+                            <input
+                                type="password"
+                                id="admin-password-input"
+                                autocomplete="current-password"
+                                data-i18n-placeholder="phAdminPass"
+                                placeholder="Nhập mật khẩu Admin..."
+                                class="w-full pl-11 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white transition"
+                            >
+
+                            <button
+                                type="button"
+                                class="password-toggle absolute inset-y-0 right-0 w-12 flex items-center justify-center text-slate-400 hover:text-emerald-600 active:text-emerald-700"
+                                data-target="admin-password-input"
+                                aria-label="Hiện mật khẩu"
+                                aria-pressed="false"
+                            >
+                                <i class="fa-solid fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" id="admin-submit-btn" class="w-full py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold rounded-xl shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2">
+                        <span data-i18n="btnAdminLogin">ĐĂNG NHẬP ADMIN</span>
+                        <i class="fa-solid fa-right-to-bracket"></i>
+                    </button>
+                </form>
+
+                <!-- Official Footer -->
+                <div class="bg-slate-50 border-t border-slate-100 px-6 py-3.5 text-xs text-slate-500 flex items-center justify-between">
+                    <span class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-check text-emerald-600"></i>
+                        <span data-i18n="officialVersion">ACE ANTENNA CO., LTD</span>
+                    </span>
+
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 2: EVALUATOR VIEW (MOBILE-FIRST CARD SCORING)                  -->
+    <!-- ===================================================================== -->
+    <section id="evaluator-screen" class="hidden min-h-screen pb-28">
+        <!-- Sticky Top Bar -->
+        <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-sm">
+            <div class="max-w-3xl mx-auto px-4 py-3">
+                <div class="flex items-center justify-between gap-2 mb-2.5">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <div class="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold shrink-0">
+                            <i class="fa-solid fa-list-check"></i>
+                        </div>
+                        <div class="truncate">
+                            <h2 data-i18n="evalHeaderTitle" class="font-extrabold text-slate-900 text-sm sm:text-base truncate">ĐÁNH GIÁ DỰ ÁN COPQ</h2>
+                            <p id="evaluator-progress-label" class="text-xs font-bold text-blue-600">Đã chấm 0/0 dự án</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <div class="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-full border border-slate-200" role="group" aria-label="Language Selector">
+                            <button type="button" data-action="set-lang" data-lang="vi" class="lang-pill-light px-2 py-1 rounded-full text-[11px] font-bold transition">VI</button>
+                            <button type="button" data-action="set-lang" data-lang="ko" class="lang-pill-light px-2 py-1 rounded-full text-[11px] font-bold transition">KO</button>
+                            <button type="button" data-action="set-lang" data-lang="en" class="lang-pill-light px-2 py-1 rounded-full text-[11px] font-bold transition">EN</button>
+                        </div>
+                        <button type="button" id="evaluator-logout-btn" class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition shrink-0 flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                            <span data-i18n="btnExit">Thoát</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-3">
+                    <div id="evaluator-progress-bar" class="h-full bg-blue-600 transition-all duration-300 w-0"></div>
+                </div>
+
+                <!-- Required Full Name & Department -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                        <label for="eval-fullname" class="sr-only">Họ và tên</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
+                                <i class="fa-solid fa-user"></i>
+                            </span>
+                            <input
+                                type="text"
+                                id="eval-fullname"
+                                data-i18n-placeholder="phFullName"
+                                placeholder="Họ và tên (Bắt buộc) *"
+                                class="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                            >
+                        </div>
+                    </div>
+                    <div>
+                        <label for="eval-department" class="sr-only">Bộ phận</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 text-xs">
+                                <i class="fa-solid fa-building"></i>
+                            </span>
+                            <input
+                                type="text"
+                                id="eval-department"
+                                data-i18n-placeholder="phDepartment"
+                                placeholder="Bộ phận / Phòng ban (Bắt buộc) *"
+                                class="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600 focus:bg-white transition"
+                            >
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Evaluation List -->
+        <main class="max-w-3xl mx-auto px-4 pt-4">
+            <div class="bg-blue-50 border border-blue-200/80 rounded-2xl p-3.5 mb-4 flex items-start gap-3">
+                <i class="fa-solid fa-circle-info text-blue-600 mt-0.5 shrink-0"></i>
+                <p data-i18n-html="evalInstructionHtml" class="text-xs text-blue-950 leading-relaxed">
+                    Nhập đầy đủ <strong>Họ và tên</strong> cùng <strong>Bộ phận</strong>, sau đó chọn điểm từ <strong>1 đến 10</strong> cho <strong>tất cả dự án</strong> bên dưới.
+                </p>
+            </div>
+
+            <div id="project-cards-list" class="space-y-4"></div>
+        </main>
+
+        <!-- Sticky Bottom SEND Bar -->
+        <footer class="fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 py-3 shadow-[0_-6px_24px_rgba(15,23,42,0.08)]">
+            <div class="max-w-3xl mx-auto flex items-center justify-between gap-3">
+                <div class="hidden sm:block">
+                    <span data-i18n="bottomStatusLabel" class="text-xs text-slate-500 block">Trạng thái phiếu đánh giá</span>
+                    <span id="bottom-status-text" class="text-sm font-bold text-slate-800">Chưa chấm đủ các dự án</span>
+                </div>
+                <button
+                    type="button"
+                    id="send-evaluation-btn"
+                    class="w-full sm:w-auto sm:min-w-[210px] py-3.5 px-6 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-extrabold rounded-2xl shadow-lg shadow-blue-600/30 transition flex items-center justify-center gap-2 text-sm sm:text-base tracking-wide"
+                >
+                    <i class="fa-solid fa-paper-plane"></i>
+                    <span>SEND</span>
+                </button>
+            </div>
+        </footer>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 2B: SUBMISSION CONFIRMED SCREEN                                -->
+    <!-- ===================================================================== -->
+    <section id="submitted-screen" class="hidden min-h-screen flex flex-col justify-center items-center p-4 bg-slate-100">
+        <div class="bg-white rounded-3xl shadow-xl border border-slate-200/80 max-w-md w-full p-7 text-center">
+            <div class="w-20 h-20 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-3xl mx-auto mb-4">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <h2 data-i18n="submittedTitle" class="text-2xl font-extrabold text-slate-900">Gửi đánh giá thành công</h2>
+            <p id="submitted-desc" class="text-sm text-slate-600 mt-2 leading-relaxed">
+                Phiếu đánh giá của <strong id="confirmed-name" class="text-slate-900"></strong> (<span id="confirmed-dept" class="font-semibold text-slate-700"></span>) đã được lưu vào hệ thống và khóa chống gửi trùng.
+            </p>
+            <div class="bg-slate-50 rounded-2xl p-4 mt-5 mb-6 text-left text-xs text-slate-600 space-y-2 border border-slate-200/70">
+                <div class="flex justify-between">
+                    <span data-i18n="submittedProjectsCountLabel">Số dự án đã chấm:</span>
+                    <strong id="confirmed-count" class="text-slate-900">0</strong>
+                </div>
+                <div class="flex justify-between">
+                    <span data-i18n="submittedTimeLabel">Thời gian gửi:</span>
+                    <strong id="confirmed-time" class="text-slate-900"></strong>
+                </div>
+            </div>
+
+
+
+            <button type="button" id="confirmed-back-login-btn"
+                class="w-full py-3.5 px-5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-circle-check"></i>
+                <span data-i18n="btnBackToLogin">XÁC NHẬN HOÀN TẤT & ĐĂNG XUẤT</span>
+            </button>
+        </div>
+    </section>
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 3: ADMIN DASHBOARD                                             -->
+    <!-- ===================================================================== -->
+    <section id="admin-screen" class="hidden min-h-screen pb-16">
+        <!-- Admin Top Bar -->
+        <header class="sticky top-0 z-30 bg-slate-900 text-white shadow-md">
+            <div class="max-w-7xl mx-auto px-4 py-3.5 flex items-center justify-between gap-3">
+                <div class="flex items-center gap-3 min-w-0">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500 text-slate-950 flex items-center justify-center font-extrabold text-lg shrink-0">
+                        <i class="fa-solid fa-user-shield"></i>
+                    </div>
+                    <div class="truncate">
+                        <h2 class="font-extrabold text-base sm:text-lg truncate">COPQ ADMIN DASHBOARD</h2>
+                        <p data-i18n="adminHeaderSub" class="text-xs text-slate-400 truncate">Quản lý danh sách dự án Excel, tính điểm, xếp hạng & xuất báo cáo</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <div class="inline-flex items-center gap-0.5 bg-slate-800 p-1 rounded-full border border-slate-700" role="group" aria-label="Language Selector">
+                        <button type="button" data-action="set-lang" data-lang="vi" class="lang-pill px-2.5 py-1 rounded-full text-xs font-bold transition">VI</button>
+                        <button type="button" data-action="set-lang" data-lang="ko" class="lang-pill px-2.5 py-1 rounded-full text-xs font-bold transition">KO</button>
+                        <button type="button" data-action="set-lang" data-lang="en" class="lang-pill px-2.5 py-1 rounded-full text-xs font-bold transition">EN</button>
+                    </div>
+                    <button type="button" id="admin-logout-btn" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition shrink-0 flex items-center gap-1.5">
+                        <i class="fa-solid fa-right-from-bracket"></i>
+                        <span data-i18n="btnLogout">Đăng xuất</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 pt-6 space-y-6">
+            <!-- Summary KPIs -->
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <span data-i18n="kpiTotalProjects" class="text-xs font-bold uppercase text-slate-500">Tổng số dự án</span>
+                    <p id="admin-kpi-projects" class="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <span data-i18n="kpiTotalEvaluators" class="text-xs font-bold uppercase text-slate-500">Số người đã đánh giá</span>
+                    <p id="admin-kpi-evaluators" class="text-2xl sm:text-3xl font-extrabold text-blue-600 mt-1">0</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <span data-i18n="kpiScoreScale" class="text-xs font-bold uppercase text-slate-500">Thang điểm chấm</span>
+                    <p class="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-1">1 – 10</p>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                    <span data-i18n="kpiResultStatus" class="text-xs font-bold uppercase text-slate-500">Trạng thái kết quả</span>
+                    <p id="admin-kpi-status" class="text-sm sm:text-base font-extrabold text-amber-600 mt-2">Chưa cập nhật</p>
+                </div>
+            </div>
+
+            <!-- Excel Tools & Password Configuration -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Excel Import & Sample Download -->
+                <div class="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                    <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                        <i class="fa-solid fa-file-excel text-emerald-600"></i>
+                        <span data-i18n="excelSectionTitle">Nhập & Tải mẫu Excel (Cấu trúc 9 cột chuẩn)</span>
+                    </h3>
+                    <p data-i18n-html="excelSectionDescHtml" class="text-xs text-slate-500 mt-1 mb-3">
+                        Cột E (<strong class="text-slate-700">Name</strong>) là <strong>Người phụ trách dự án</strong>, Cột F (<strong class="text-slate-700">COPQ</strong>) là <strong>Tên dự án</strong>.
+                    </p>
+                    <div class="flex flex-wrap gap-1.5 text-[11px] font-mono text-slate-700 mb-4 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70">
+                        <span class="bg-white px-2 py-0.5 rounded border">A: No</span>
+                        <span class="bg-white px-2 py-0.5 rounded border">B: Group</span>
+                        <span class="bg-white px-2 py-0.5 rounded border">C: Part</span>
+                        <span class="bg-white px-2 py-0.5 rounded border">D: Section</span>
+                        <span data-i18n="colBadgeOwner" class="bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-bold text-amber-900">E: Name (Người phụ trách)</span>
+                        <span data-i18n="colBadgeProject" class="bg-blue-50 px-2 py-0.5 rounded border border-blue-200 font-bold text-blue-900">F: COPQ (Tên dự án)</span>
+                        <span class="bg-white px-2 py-0.5 rounded border">G: Total point</span>
+                        <span class="bg-white px-2 py-0.5 rounded border">H: Rank</span>
+                        <span class="bg-white px-2 py-0.5 rounded border">I: Yearly Point</span>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-3">
+                        <button
+                            type="button"
+                            id="download-sample-excel-btn"
+                            class="px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-sm font-bold border border-slate-200 transition flex items-center justify-center gap-2"
+                        >
+                            <i class="fa-solid fa-file-arrow-down text-blue-600"></i>
+                            <span data-i18n="btnDownloadSample">Tải Excel mẫu (.xlsx)</span>
+                        </button>
+
+                        <label class="flex-1 cursor-pointer px-4 py-3 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-sm font-bold border border-dashed border-blue-300 transition flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-file-import"></i>
+                            <span data-i18n="btnUploadExcel">Upload file Excel (.xlsx, .xls, .csv)</span>
+                            <input
+                                type="file"
+                                id="excel-file-input"
+                                accept=".xlsx,.xls,.csv"
+                                class="hidden"
+                            >
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Common Evaluator Password Settings -->
+                <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2 mb-2">
+                            <i class="fa-solid fa-lock text-slate-700"></i>
+                            <span data-i18n="passSettingTitle">Mật khẩu chung người đánh giá</span>
+                        </h3>
+                        <p data-i18n="passSettingDesc" class="text-xs text-slate-500 mb-3">Thay đổi mật khẩu chung cho đợt đánh giá tiếp theo.</p>
+                        <input
+                            type="text"
+                            id="settings-common-password"
+                            data-i18n-placeholder="phCommonPass"
+                            placeholder="Nhập mật khẩu chung..."
+                            class="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white transition"
+                        >
+                    </div>
+                    <button
+                        type="button"
+                        id="save-common-password-btn"
+                        data-i18n="btnSaveCommonPass"
+                        class="mt-4 w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-bold transition"
+                    >
+                        Lưu mật khẩu chung
+                    </button>
+                </div>
+            </div>
+
+            <!-- Results & Ranking Table (9 Columns) -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/70">
+                    <div>
+                        <h3 class="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-trophy text-amber-500"></i>
+                            <span data-i18n="rankingTableTitle">Bảng Tổng Hợp Điểm & Xếp Hạng Dự Án</span>
+                        </h3>
+                        <p data-i18n-html="rankingFormulaDescHtml" class="text-xs text-slate-500 mt-1">
+                            Rank: <strong>#1</strong> = Rank 1 | <strong>#2–#5</strong> = Rank 2 | <strong>#6–#9</strong> = Rank 3 | <strong>#10+</strong> = Rank 4.
+                            Yearly Point = <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono">ROUND((Total point / (Số người đánh giá * 10)) * 100, 0)</code>.
+                        </p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <button
+                            type="button"
+                            id="update-result-btn"
+                            class="px-5 py-3 rounded-xl bg-amber-400 hover:bg-amber-500 active:scale-[0.98] text-slate-950 text-sm font-extrabold shadow-sm transition flex items-center gap-2"
+                        >
+                            <i class="fa-solid fa-calculator"></i>
+                            <span>UPDATE RESULT</span>
+                        </button>
+                        <button
+                            type="button"
+                            id="export-excel-btn"
+                            class="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] text-white text-sm font-bold shadow-sm transition flex items-center gap-2"
+                        >
+                            <i class="fa-solid fa-file-export"></i>
+                            <span data-i18n="btnExportExcel">Xuất Excel Kết Quả</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 9-Column Table (Evaluator's point 1-15 completely hidden) -->
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[960px]">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-600 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
+                                <th class="py-3 px-3 text-center w-14">No</th>
+                                <th class="py-3 px-3">Group</th>
+                                <th class="py-3 px-3">Part</th>
+                                <th class="py-3 px-3">Section</th>
+                                <th data-i18n="thOwner" class="py-3 px-3">Name (Người phụ trách)</th>
+                                <th data-i18n="thProject" class="py-3 px-3 min-w-[240px] bg-blue-50/70 text-blue-900">COPQ (Tên dự án)</th>
+                                <th class="py-3 px-3 text-center bg-emerald-50/70 text-emerald-800">Total point</th>
+                                <th class="py-3 px-3 text-center bg-amber-50/70 text-amber-800">Rank</th>
+                                <th class="py-3 px-3 text-center bg-indigo-50/70 text-indigo-800">Yearly Point</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-results-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Submitted Evaluators List -->
+            <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="p-5 border-b border-slate-200 flex items-center justify-between gap-3">
+                    <div>
+                        <h3 class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-users-check text-blue-600"></i>
+                            <span data-i18n="evalListTitle">Danh sách người đã gửi đánh giá</span>
+                        </h3>
+                        <p data-i18n="evalListDesc" class="text-xs text-slate-500 mt-0.5">Admin kiểm tra các bản ghi trùng theo Họ tên + Bộ phận và quyết định giữ lại hoặc xóa.</p>
+                    </div>
+                    <button
+                        type="button"
+                        id="clear-all-evaluations-btn"
+                        data-i18n="btnClearAllEvals"
+                        class="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition"
+                    >
+                        Xóa tất cả phiếu chấm
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[600px]">
+                        <thead>
+                            <tr class="bg-slate-50 text-slate-500 text-[11px] font-bold uppercase tracking-wider border-b border-slate-200">
+                                <th data-i18n="thIndex" class="py-3 px-4 w-14">STT</th>
+                                <th data-i18n="thFullName" class="py-3 px-4">Họ và tên</th>
+                                <th data-i18n="thDepartment" class="py-3 px-4">Bộ phận</th>
+                                <th data-i18n="thSubmittedAt" class="py-3 px-4">Thời gian gửi</th>
+                                <th data-i18n="thActions" class="py-3 px-4 text-right">Thao tác</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-evaluations-tbody" class="divide-y divide-slate-100 text-sm"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </section>
+
+    <script>
+        (function () {
+            'use strict';
+
+            // =================================================================
+            // 1. CONSTANTS, I18N DICTIONARY & DEFAULT SAMPLE DATA
+            // =================================================================
+            // Web App URL từ Google Apps Script:
+            const API_URL = 'https://script.google.com/macros/s/AKfycbzaapmxGpUniBKdIHRnspJ-1_ZbMBPLyxtjZmQXz6PsJejMMN20JPGS2SEsuzuM_DxT/exec';
+
+
+            const STORAGE_KEYS = {
+                CONFIG: 'copq_eval_config_v4',
+                PROJECTS: 'copq_eval_projects_v4',
+                EVALUATIONS: 'copq_eval_submissions_v4',
+                LANG: 'copq_eval_lang_v1'
+            };
+
+            const I18N = {
+                vi: {
+                    loginSubtitle: 'Hệ thống đánh giá điểm & xếp hạng dự án COPQ',
+                    tabEvaluator: 'Người đánh giá',
+                    tabAdmin: 'Quản trị (Admin)',
+                    labelCommonPass: 'Mật khẩu chung người đánh giá',
+                    phCommonPass: 'Nhập mật khẩu chung...',
+                    btnEnterEval: 'VÀO CHẤM ĐIỂM',
+                    labelAdminPass: 'Mật khẩu quản trị viên (Admin)',
+                    phAdminPass: 'Nhập mật khẩu Admin...',
+                    btnAdminLogin: 'ĐĂNG NHẬP ADMIN',
+                    officialVersion: 'ACE ANTENNA CO., LTD',
+                    btnResetDefault: 'Khôi phục mặc định',
+                    evalHeaderTitle: 'ĐÁNH GIÁ DỰ ÁN COPQ',
+                    btnExit: 'Thoát',
+                    phFullName: 'Họ và tên (Bắt buộc) *',
+                    phDepartment: 'Bộ phận / Phòng ban (Bắt buộc) *',
+                    evalInstructionHtml: 'Nhập đầy đủ <strong>Họ và tên</strong> cùng <strong>Bộ phận</strong>, sau đó chọn điểm từ <strong>1 đến 10</strong> cho <strong>tất cả dự án</strong> bên dưới.',
+                    bottomStatusLabel: 'Trạng thái phiếu đánh giá',
+                    submittedTitle: 'Gửi đánh giá thành công',
+                    submittedProjectsCountLabel: 'Số dự án đã chấm:',
+                    submittedTimeLabel: 'Thời gian gửi:',
+                    btnBackToLogin: 'XÁC NHẬN HOÀN TẤT & ĐĂNG XUẤT',
+                    adminHeaderSub: 'Quản lý danh sách dự án Excel, tính điểm, xếp hạng & xuất báo cáo',
+                    btnLogout: 'Đăng xuất',
+                    kpiTotalProjects: 'Tổng số dự án',
+                    kpiTotalEvaluators: 'Số người đã đánh giá',
+                    kpiScoreScale: 'Thang điểm chấm',
+                    kpiResultStatus: 'Trạng thái kết quả',
+                    excelSectionTitle: 'Nhập & Tải mẫu Excel (Cấu trúc 9 cột chuẩn)',
+                    excelSectionDescHtml: 'Cột E (<strong class="text-slate-700">Name</strong>) là <strong>Người phụ trách dự án</strong>, Cột F (<strong class="text-slate-700">COPQ</strong>) là <strong>Tên dự án</strong>.',
+                    colBadgeOwner: 'E: Name (Người phụ trách)',
+                    colBadgeProject: 'F: COPQ (Tên dự án)',
+                    btnDownloadSample: 'Tải Excel mẫu (.xlsx)',
+                    btnUploadExcel: 'Upload file Excel (.xlsx, .xls, .csv)',
+                    passSettingTitle: 'Mật khẩu chung người đánh giá',
+                    passSettingDesc: 'Thay đổi mật khẩu chung cho đợt đánh giá tiếp theo.',
+                    btnSaveCommonPass: 'Lưu mật khẩu chung',
+                    rankingTableTitle: 'Bảng Tổng Hợp Điểm & Xếp Hạng Dự Án',
+                    rankingFormulaDescHtml: 'Rank: <strong>#1</strong> = Rank 1 | <strong>#2–#5</strong> = Rank 2 | <strong>#6–#9</strong> = Rank 3 | <strong>#10+</strong> = Rank 4. Yearly Point = <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono">ROUND((Total point / (Số người đánh giá * 10)) * 100, 0)</code>.',
+                    btnExportExcel: 'Xuất Excel Kết Quả',
+                    thOwner: 'Name (Người phụ trách)',
+                    thProject: 'COPQ (Tên dự án)',
+                    evalListTitle: 'Danh sách người đã gửi đánh giá',
+                    evalListDesc: 'Admin kiểm tra các bản ghi trùng theo Họ tên + Bộ phận và quyết định giữ lại hoặc xóa',
+                    btnClearAllEvals: 'Xóa tất cả phiếu chấm',
+                    thIndex: 'STT',
+                    thFullName: 'Họ và tên',
+                    thDepartment: 'Bộ phận',
+                    thSubmittedAt: 'Thời gian gửi',
+                    thActions: 'Thao tác',
+                    // Dynamic strings
+                    modalNotice: 'Thông báo',
+                    modalOk: 'Đồng ý',
+                    modalCancel: 'Hủy',
+                    progressText: 'Đã chấm {scored}/{total} dự án',
+                    statusNoProjects: 'Không có dự án nào',
+                    statusReady: 'Đã chấm đủ {scored}/{total} dự án — Sẵn sàng gửi',
+                    statusMissing: 'Còn thiếu {missing} dự án chưa chấm',
+                    badgeScored: 'Điểm: {score}/10',
+                    badgeUnscored: 'Chưa chấm',
+                    projectOwnerLabel: 'Người phụ trách:',
+                    noProjectsInSystem: 'Chưa có dự án COPQ nào trong hệ thống.',
+                    statusUpdated: 'Đã cập nhật Rank',
+                    statusNotUpdated: 'Chưa cập nhật',
+                    emptyAdminProjects: 'Chưa có dữ liệu dự án. Hãy tải lên file Excel hoặc tải file mẫu.',
+                    emptyAdminEvaluations: 'Chưa có phiếu đánh giá nào được gửi.',
+                    btnDelete: 'Xóa',
+                    submittedDescHtml: 'Phiếu đánh giá của <strong class="text-slate-900">{name}</strong> (<span class="font-semibold text-slate-700">{dept}</span>) đã được lưu vào hệ thống và khóa chống gửi trùng.',
+                    // Alerts & Toasts
+                    errNoCommonPassTitle: 'Chưa nhập mật khẩu',
+                    errNoCommonPassMsg: 'Vui lòng nhập mật khẩu chung để vào chấm điểm.',
+                    errWrongCommonPassTitle: 'Sai mật khẩu chung',
+                    errWrongCommonPassMsg: 'Mật khẩu chung không chính xác. Vui lòng kiểm tra lại.',
+                    toastEvalLoginSuccess: 'Đăng nhập người đánh giá thành công',
+                    errNoAdminPassTitle: 'Chưa nhập mật khẩu Admin',
+                    errNoAdminPassMsg: 'Vui lòng nhập mật khẩu quản trị viên để tiếp tục.',
+                    errWrongAdminPassTitle: 'Sai mật khẩu Admin',
+                    errWrongAdminPassMsg: 'Mật khẩu quản trị viên không chính xác. Vui lòng kiểm tra lại.',
+                    toastAdminLoginSuccess: 'Đăng nhập Admin thành công',
+                    resetModalTitle: 'Khôi phục dữ liệu mặc định',
+                    resetModalMsg: 'Khôi phục toàn bộ danh sách dự án, phiếu chấm và đặt lại cấu hình hệ thống về mặc định?',
+                    resetModalConfirm: 'Khôi phục ngay',
+                    toastResetSuccess: 'Đã khôi phục dữ liệu mẫu thành công',
+                    errNoNameTitle: 'Thiếu Họ và tên',
+                    errNoNameMsg: 'Vui lòng nhập Họ và tên trước khi nhấn SEND.',
+                    errNoDeptTitle: 'Thiếu Bộ phận',
+                    errNoDeptMsg: 'Vui lòng nhập Bộ phận trước khi nhấn SEND.',
+                    errNoProjectsTitle: 'Không có dự án',
+                    errNoProjectsMsg: 'Hiện chưa có dự án nào trong danh sách đánh giá.',
+                    errIncompleteTitle: 'Chưa chấm đủ dự án',
+                    errIncompleteMsg: 'Bạn chưa chấm điểm cho dự án "{project}". Vui lòng chấm đầy đủ tất cả dự án trước khi nhấn SEND.',
+                    errDuplicateTitle: 'Chặn gửi trùng đánh giá',
+                    errDuplicateMsg: 'Người đánh giá "{name}" thuộc bộ phận "{dept}" đã gửi phiếu chấm trước đó. Hệ thống không cho phép gửi lại.',
+                    toastSendSuccess: 'Đã gửi phiếu đánh giá thành công',
+                    toastNoProjectsCalc: 'Không có dự án nào để tính toán',
+                    toastZeroEvaluators: 'Chưa có người đánh giá nào (Số người đánh giá = 0).',
+                    toastUpdateSuccess: 'Đã tính toán kết quả từ {count} phiếu đánh giá và xếp hạng thành công',
+                    toastEmptyCommonPass: 'Mật khẩu chung không được để trống',
+                    toastSavedCommonPass: 'Đã cập nhật mật khẩu chung thành "{pass}"',
+                    delEvalTitle: 'Xóa phiếu đánh giá',
+                    delEvalMsg: 'Bạn có chắc chắn muốn xóa phiếu đánh giá này không?',
+                    delEvalConfirm: 'Xóa phiếu',
+                    toastDeletedEval: 'Đã xóa phiếu đánh giá',
+                    toastEvalsAlreadyEmpty: 'Danh sách phiếu đánh giá đang trống',
+                    clearAllTitle: 'Xóa tất cả phiếu đánh giá',
+                    clearAllMsg: 'Thao tác này sẽ xóa toàn bộ phiếu chấm hiện tại và đặt lại điểm tính toán về 0. Tiếp tục?',
+                    clearAllConfirm: 'Xóa tất cả',
+                    toastClearedAll: 'Đã xóa toàn bộ phiếu đánh giá',
+                    toastXlsxNotReady: 'Thư viện Excel chưa tải xong, vui lòng thử lại',
+                    toastSampleDownloaded: 'Đã tải file Excel mẫu (9 cột chuẩn)',
+                    errEmptyExcelTitle: 'File Excel trống',
+                    errEmptyExcelMsg: 'Không tìm thấy dòng dữ liệu dự án trong sheet đầu tiên.',
+                    errInvalidExcelTitle: 'Không có dữ liệu hợp lệ',
+                    errInvalidExcelMsg: 'File Excel không chứa dòng dự án hợp lệ nào.',
+                    toastImportedExcel: 'Đã nhập thành công {count} dự án từ file Excel',
+                    errReadExcelTitle: 'Lỗi đọc file Excel',
+                    errReadExcelMsg: 'Không thể đọc file Excel. Vui lòng kiểm tra lại định dạng .xlsx, .xls hoặc .csv.',
+                    toastNoExportData: 'Không có dữ liệu dự án để xuất Excel',
+                    toastExportedExcel: 'Đã xuất file Excel kết quả xếp hạng thành công'
+                },
+                ko: {
+                    loginSubtitle: 'COPQ 프로젝트 점수 평가 및 순위 산정 시스템',
+                    tabEvaluator: '평가자 (Evaluator)',
+                    tabAdmin: '관리자 (Admin)',
+                    labelCommonPass: '평가자 공통 비밀번호',
+                    phCommonPass: '공통 비밀번호를 입력하세요...',
+                    btnEnterEval: '평가 시작하기',
+                    labelAdminPass: '관리자 비밀번호 (Admin)',
+                    phAdminPass: '관리자 비밀번호를 입력하세요...',
+                    btnAdminLogin: '관리자 로그인',
+                    officialVersion: '공식 운영 버전',
+                    btnResetDefault: '기본값 복원',
+                    evalHeaderTitle: 'COPQ 프로젝트 평가',
+                    btnExit: '나가기',
+                    phFullName: '성명 (필수) *',
+                    phDepartment: '부서 / 팀명 (필수) *',
+                    evalInstructionHtml: '<strong>성명</strong>과 <strong>부서</strong>를 모두 입력한 후, 아래 <strong>모든 프로젝트</strong>에 대해 <strong>1~10점</strong>을 선택해 주세요.',
+                    bottomStatusLabel: '평가표 작성 상태',
+                    submittedTitle: '평가 제출 완료',
+                    submittedProjectsCountLabel: '평가 완료 프로젝트 수:',
+                    submittedTimeLabel: '제출 시간:',
+                    btnBackToLogin: '평가 완료 확인 및 로그아웃',
+                    adminHeaderSub: 'Excel 프로젝트 관리, 점수 집계, 순위 산정 및 보고서 내보내기',
+                    btnLogout: '로그아웃',
+                    kpiTotalProjects: '전체 프로젝트 수',
+                    kpiTotalEvaluators: '참여 평가자 수',
+                    kpiScoreScale: '평가 점수 범위',
+                    kpiResultStatus: '결과 집계 상태',
+                    excelSectionTitle: 'Excel 업로드 및 양식 다운로드 (표준 9열 구조)',
+                    excelSectionDescHtml: 'E열(<strong class="text-slate-700">Name</strong>)은 <strong>프로젝트 담당자</strong>, F열(<strong class="text-slate-700">COPQ</strong>)은 <strong>프로젝트명</strong>입니다.',
+                    colBadgeOwner: 'E: Name (담당자)',
+                    colBadgeProject: 'F: COPQ (프로젝트명)',
+                    btnDownloadSample: 'Excel 양식 다운로드 (.xlsx)',
+                    btnUploadExcel: 'Excel 파일 업로드 (.xlsx, .xls, .csv)',
+                    passSettingTitle: '평가자 공통 비밀번호 설정',
+                    passSettingDesc: '다음 평가 회차를 위한 공통 비밀번호를 변경합니다.',
+                    btnSaveCommonPass: '공통 비밀번호 저장',
+                    rankingTableTitle: '프로젝트 점수 집계 및 순위표',
+                    rankingFormulaDescHtml: '순위(Rank): <strong>#1</strong> = Rank 1 | <strong>#2–#5</strong> = Rank 2 | <strong>#6–#9</strong> = Rank 3 | <strong>#10+</strong> = Rank 4. Yearly Point = <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono">ROUND((Total point / (평가자 수 * 10)) * 100, 0)</code>.',
+                    btnExportExcel: '결과 Excel 내보내기',
+                    thOwner: 'Name (담당자)',
+                    thProject: 'COPQ (프로젝트명)',
+                    evalListTitle: '평가 제출자 목록',
+                    evalListDesc: '관리자는 성명 + 부서 기준으로 중복 제출을 확인하고 유지하거나 삭제할 수 있습니다.',
+                    btnClearAllEvals: '전체 평가표 삭제',
+                    thIndex: '번호',
+                    thFullName: '성명',
+                    thDepartment: '부서',
+                    thSubmittedAt: '제출 시간',
+                    thActions: '관리',
+                    // Dynamic strings
+                    modalNotice: '알림',
+                    modalOk: '확인',
+                    modalCancel: '취소',
+                    progressText: '{scored}/{total}개 프로젝트 평가 완료',
+                    statusNoProjects: '등록된 프로젝트가 없습니다',
+                    statusReady: '{scored}/{total}개 평가 완료 — 제출 가능',
+                    statusMissing: '미평가 프로젝트 {missing}개 남음',
+                    badgeScored: '점수: {score}/10',
+                    badgeUnscored: '미평가',
+                    projectOwnerLabel: '담당자:',
+                    noProjectsInSystem: '시스템에 등록된 COPQ 프로젝트가 없습니다.',
+                    statusUpdated: '순위 업데이트 완료',
+                    statusNotUpdated: '미집계 상태',
+                    emptyAdminProjects: '프로젝트 데이터가 없습니다. Excel 파일을 업로드하거나 양식을 다운로드하세요.',
+                    emptyAdminEvaluations: '제출된 평가표가 없습니다.',
+                    btnDelete: '삭제',
+                    submittedDescHtml: '<strong class="text-slate-900">{name}</strong> (<span class="font-semibold text-slate-700">{dept}</span>) 님의 평가표가 시스템에 저장되었으며 중복 제출 방지가 적용되었습니다.',
+                    // Alerts & Toasts
+                    errNoCommonPassTitle: '비밀번호 미입력',
+                    errNoCommonPassMsg: '평가를 시작하려면 공통 비밀번호를 입력해 주세요.',
+                    errWrongCommonPassTitle: '공통 비밀번호 오류',
+                    errWrongCommonPassMsg: '공통 비밀번호가 올바르지 않습니다. 다시 확인해 주세요.',
+                    toastEvalLoginSuccess: '평가자 로그인 성공',
+                    errNoAdminPassTitle: '관리자 비밀번호 미입력',
+                    errNoAdminPassMsg: '계속하려면 관리자 비밀번호를 입력해 주세요.',
+                    errWrongAdminPassTitle: '관리자 비밀번호 오류',
+                    errWrongAdminPassMsg: '관리자 비밀번호가 올바르지 않습니다. 다시 확인해 주세요.',
+                    toastAdminLoginSuccess: '관리자 로그인 성공',
+                    resetModalTitle: '기본 데이터 복원',
+                    resetModalMsg: '모든 프로젝트 목록, 평가표 및 시스템 설정을 초기 기본값으로 복원하시겠습니까?',
+                    resetModalConfirm: '지금 복원',
+                    toastResetSuccess: '기본 샘플 데이터가 복원되었습니다',
+                    errNoNameTitle: '성명 미입력',
+                    errNoNameMsg: 'SEND 버튼을 누르기 전에 성명을 입력해 주세요.',
+                    errNoDeptTitle: '부서 미입력',
+                    errNoDeptMsg: 'SEND 버튼을 누르기 전에 부서를 입력해 주세요.',
+                    errNoProjectsTitle: '프로젝트 없음',
+                    errNoProjectsMsg: '현재 평가 목록에 등록된 프로젝트가 없습니다.',
+                    errIncompleteTitle: '미평가 항목 존재',
+                    errIncompleteMsg: '"{project}" 프로젝트의 점수가 선택되지 않았습니다. SEND를 누르기 전에 모든 프로젝트를 평가해 주세요.',
+                    errDuplicateTitle: '중복 제출 차단',
+                    errDuplicateMsg: '"{dept}" 부서의 "{name}" 님은 이미 평가표를 제출하셨습니다. 중복 제출은 허용되지 않습니다.',
+                    toastSendSuccess: '평가표가 성공적으로 제출되었습니다',
+                    toastNoProjectsCalc: '계산할 프로젝트가 없습니다',
+                    toastZeroEvaluators: '제출된 평가자가 없습니다 (평가자 수 = 0).',
+                    toastUpdateSuccess: '{count}명의 평가 결과를 집계하고 순위를 산정했습니다',
+                    toastEmptyCommonPass: '공통 비밀번호는 비워둘 수 없습니다',
+                    toastSavedCommonPass: '공통 비밀번호가 "{pass}"(으)로 변경되었습니다',
+                    delEvalTitle: '평가표 삭제',
+                    delEvalMsg: '이 평가표를 정말 삭제하시겠습니까?',
+                    delEvalConfirm: '삭제',
+                    toastDeletedEval: '평가표가 삭제되었습니다',
+                    toastEvalsAlreadyEmpty: '제출된 평가표 목록이 비어 있습니다',
+                    clearAllTitle: '전체 평가표 삭제',
+                    clearAllMsg: '현재 저장된 모든 평가표를 삭제하고 집계 점수를 0으로 초기화합니다. 계속하시겠습니까?',
+                    clearAllConfirm: '전체 삭제',
+                    toastClearedAll: '모든 평가표가 삭제되었습니다',
+                    toastXlsxNotReady: 'Excel 라이브러리가 아직 준비되지 않았습니다. 잠시 후 다시 시도해 주세요.',
+                    toastSampleDownloaded: '표준 9열 Excel 양식이 다운로드되었습니다',
+                    errEmptyExcelTitle: '빈 Excel 파일',
+                    errEmptyExcelMsg: '첫 번째 시트에서 프로젝트 데이터 행을 찾을 수 없습니다.',
+                    errInvalidExcelTitle: '유효한 데이터 없음',
+                    errInvalidExcelMsg: 'Excel 파일에 유효한 프로젝트 행이 포함되어 있지 않습니다.',
+                    toastImportedExcel: 'Excel 파일에서 {count}개의 프로젝트를 성공적으로 가져왔습니다',
+                    errReadExcelTitle: 'Excel 읽기 오류',
+                    errReadExcelMsg: 'Excel 파일을 읽을 수 없습니다. .xlsx, .xls 또는 .csv 형식을 확인해 주세요.',
+                    toastNoExportData: '내보낼 프로젝트 데이터가 없습니다',
+                    toastExportedExcel: '순위 결과 Excel 파일이 성공적으로 내보내졌습니다'
+                },
+                en: {
+                    loginSubtitle: 'COPQ Project Scoring & Ranking System',
+                    tabEvaluator: 'Evaluator',
+                    tabAdmin: 'Admin',
+                    labelCommonPass: 'Evaluator Shared Password',
+                    phCommonPass: 'Enter shared password...',
+                    btnEnterEval: 'START EVALUATION',
+                    labelAdminPass: 'Administrator Password',
+                    phAdminPass: 'Enter Admin password...',
+                    btnAdminLogin: 'ADMIN LOGIN',
+                    officialVersion: 'Ace Antenna',
+                    btnResetDefault: 'Reset Default',
+                    evalHeaderTitle: 'COPQ PROJECT EVALUATION',
+                    btnExit: 'Exit',
+                    phFullName: 'Full Name (Required) *',
+                    phDepartment: 'Department (Required) *',
+                    evalInstructionHtml: 'Enter your <strong>Full Name</strong> and <strong>Department</strong>, then rate <strong>every project</strong> below from <strong>1 to 10</strong>.',
+                    bottomStatusLabel: 'Evaluation Form Status',
+                    submittedTitle: 'Evaluation Submitted',
+                    submittedProjectsCountLabel: 'Projects evaluated:',
+                    submittedTimeLabel: 'Submitted at:',
+                    btnBackToLogin: 'CONFIRM COMPLETION & LOG OUT',
+                    adminHeaderSub: 'Manage Excel project list, compute rankings & export reports',
+                    btnLogout: 'Logout',
+                    kpiTotalProjects: 'Total Projects',
+                    kpiTotalEvaluators: 'Submitted Evaluators',
+                    kpiScoreScale: 'Scoring Scale',
+                    kpiResultStatus: 'Result Status',
+                    excelSectionTitle: 'Excel Import & Template Download (Standard 9 Columns)',
+                    excelSectionDescHtml: 'Column E (<strong class="text-slate-700">Name</strong>) is the <strong>Project Owner</strong>, Column F (<strong class="text-slate-700">COPQ</strong>) is the <strong>Project Name</strong>.',
+                    colBadgeOwner: 'E: Name (Project Owner)',
+                    colBadgeProject: 'F: COPQ (Project Name)',
+                    btnDownloadSample: 'Download Template (.xlsx)',
+                    btnUploadExcel: 'Upload Excel (.xlsx, .xls, .csv)',
+                    passSettingTitle: 'Evaluator Shared Password',
+                    passSettingDesc: 'Update the shared password for the next evaluation round.',
+                    btnSaveCommonPass: 'Save Shared Password',
+                    rankingTableTitle: 'Project Score Summary & Ranking',
+                    rankingFormulaDescHtml: 'Rank: <strong>#1</strong> = Rank 1 | <strong>#2–#5</strong> = Rank 2 | <strong>#6–#9</strong> = Rank 3 | <strong>#10+</strong> = Rank 4. Yearly Point = <code class="bg-slate-100 px-1.5 py-0.5 rounded text-slate-700 font-mono">ROUND((Total point / (Evaluators * 10)) * 100, 0)</code>.',
+                    btnExportExcel: 'Export Result Excel',
+                    thOwner: 'Name (Project Owner)',
+                    thProject: 'COPQ (Project Name)',
+                    evalListTitle: 'Submitted Evaluators List',
+                    evalListDesc: 'Admin reviews duplicate submissions by Full Name + Department and decides whether to keep or delete them.',
+                    btnClearAllEvals: 'Clear All Submissions',
+                    thIndex: 'No.',
+                    thFullName: 'Full Name',
+                    thDepartment: 'Department',
+                    thSubmittedAt: 'Submitted At',
+                    thActions: 'Action',
+                    // Dynamic strings
+                    modalNotice: 'Notice',
+                    modalOk: 'OK',
+                    modalCancel: 'Cancel',
+                    progressText: 'Scored {scored}/{total} projects',
+                    statusNoProjects: 'No projects available',
+                    statusReady: 'All {scored}/{total} projects scored — Ready to send',
+                    statusMissing: '{missing} project(s) remaining',
+                    badgeScored: 'Score: {score}/10',
+                    badgeUnscored: 'Not scored',
+                    projectOwnerLabel: 'Project Owner:',
+                    noProjectsInSystem: 'No COPQ projects available in the system.',
+                    statusUpdated: 'Rank Updated',
+                    statusNotUpdated: 'Not Updated',
+                    emptyAdminProjects: 'No project data yet. Please upload an Excel file or download the template.',
+                    emptyAdminEvaluations: 'No evaluations have been submitted yet.',
+                    btnDelete: 'Delete',
+                    submittedDescHtml: 'The evaluation submitted by <strong class="text-slate-900">{name}</strong> (<span class="font-semibold text-slate-700">{dept}</span>) has been recorded and locked against duplicates.',
+                    // Alerts & Toasts
+                    errNoCommonPassTitle: 'Password Required',
+                    errNoCommonPassMsg: 'Please enter the shared password to start evaluating.',
+                    errWrongCommonPassTitle: 'Incorrect Password',
+                    errWrongCommonPassMsg: 'The shared password is incorrect. Please try again.',
+                    toastEvalLoginSuccess: 'Logged in as Evaluator',
+                    errNoAdminPassTitle: 'Admin Password Required',
+                    errNoAdminPassMsg: 'Please enter the administrator password to continue.',
+                    errWrongAdminPassTitle: 'Incorrect Admin Password',
+                    errWrongAdminPassMsg: 'The administrator password is incorrect. Please try again.',
+                    toastAdminLoginSuccess: 'Logged in as Admin',
+                    resetModalTitle: 'Reset to Default Data',
+                    resetModalMsg: 'Restore all default projects, sample submissions, and system settings?',
+                    resetModalConfirm: 'Reset Now',
+                    toastResetSuccess: 'Default sample data restored',
+                    errNoNameTitle: 'Full Name Required',
+                    errNoNameMsg: 'Please enter your Full Name before clicking SEND.',
+                    errNoDeptTitle: 'Department Required',
+                    errNoDeptMsg: 'Please enter your Department before clicking SEND.',
+                    errNoProjectsTitle: 'No Projects',
+                    errNoProjectsMsg: 'There are currently no projects to evaluate.',
+                    errIncompleteTitle: 'Incomplete Evaluation',
+                    errIncompleteMsg: 'You have not scored "{project}". Please rate all projects before clicking SEND.',
+                    errDuplicateTitle: 'Duplicate Submission Blocked',
+                    errDuplicateMsg: 'Evaluator "{name}" from "{dept}" has already submitted an evaluation. Duplicate submissions are not allowed.',
+                    toastSendSuccess: 'Evaluation submitted successfully',
+                    toastNoProjectsCalc: 'No projects available to calculate',
+                    toastZeroEvaluators: 'No evaluators found (Evaluators = 0).',
+                    toastUpdateSuccess: 'Calculated scores from {count} evaluator(s) and updated ranks',
+                    toastEmptyCommonPass: 'Shared password cannot be empty',
+                    toastSavedCommonPass: 'Shared password updated to "{pass}"',
+                    delEvalTitle: 'Delete Submission',
+                    delEvalMsg: 'Are you sure you want to delete this evaluation submission?',
+                    delEvalConfirm: 'Delete',
+                    toastDeletedEval: 'Evaluation submission deleted',
+                    toastEvalsAlreadyEmpty: 'Submissions list is already empty',
+                    clearAllTitle: 'Clear All Submissions',
+                    clearAllMsg: 'This will delete all current evaluation submissions and reset calculated points to 0. Continue?',
+                    clearAllConfirm: 'Clear All',
+                    toastClearedAll: 'All evaluation submissions cleared',
+                    toastXlsxNotReady: 'Excel library is still loading, please try again',
+                    toastSampleDownloaded: 'Downloaded standard 9-column Excel template',
+                    errEmptyExcelTitle: 'Empty Excel File',
+                    errEmptyExcelMsg: 'No project data rows were found in the first worksheet.',
+                    errInvalidExcelTitle: 'No Valid Data',
+                    errInvalidExcelMsg: 'The Excel file contains no valid project rows.',
+                    toastImportedExcel: 'Successfully imported {count} projects from Excel',
+                    errReadExcelTitle: 'Excel Read Error',
+                    errReadExcelMsg: 'Unable to read the Excel file. Please verify the .xlsx, .xls, or .csv format.',
+                    toastNoExportData: 'No project data available to export',
+                    toastExportedExcel: 'Ranking result Excel file exported successfully'
+                }
+            };
+
+            const EXCEL_COLUMNS = [
+                'No',
+                'Group',
+                'Part',
+                'Section',
+                'Name',
+                'COPQ',
+                'Total point',
+                'Rank',
+                'Yearly Point'
+            ];
+
+            const DEFAULT_CONFIG = {
+                commonPassword: 'COPQ2026',
+                adminPassword: 'ADMIN567',
+                resultsUpdated: false
+            };
+
+            // Column E (name) = Project Owner; Column F (copq) = Project Name
+            const SAMPLE_PROJECTS = [
+                {
+                    no: 1,
+                    group: 'Manufacturing',
+                    part: 'Assembly Line A',
+                    section: 'SMT-01',
+                    name: 'Phạm Minh Tuấn',
+                    copq: 'Giảm tỷ lệ lỗi hàn bo mạch chủ dòng X200',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 2,
+                    group: 'Quality Control',
+                    part: 'Incoming IQC',
+                    section: 'IQC-Metal',
+                    name: 'Đỗ Thị Lan Anh',
+                    copq: 'Tối ưu quy trình kiểm tra vỏ nhôm CNC tránh trầy xước',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 3,
+                    group: 'Engineering',
+                    part: 'Mold & Tooling',
+                    section: 'Press-02',
+                    name: 'Vũ Đức Thắng',
+                    copq: 'Cải tiến khuôn dập liên hoàn giảm phế phẩm nhựa ABS',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 4,
+                    group: 'Supply Chain',
+                    part: 'Warehouse',
+                    section: 'WH-Cold',
+                    name: 'Ngô Thanh Huyền',
+                    copq: 'Kiểm soát độ ẩm kho linh kiện bán dẫn chống oxy hóa',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 5,
+                    group: 'Manufacturing',
+                    part: 'Final Testing',
+                    section: 'FQC-03',
+                    name: 'Bùi Quang Hải',
+                    copq: 'Tự động hóa test quang học AOI giảm sai sót ngoại quan',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 6,
+                    group: 'Maintenance',
+                    part: 'Equipment',
+                    section: 'EQ-04',
+                    name: 'Hoàng Văn Nam',
+                    copq: 'Giảm thời gian dừng máy đột dập bằng bảo trì dự đoán',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 7,
+                    group: 'Production',
+                    part: 'Packaging',
+                    section: 'PKG-01',
+                    name: 'Trịnh Thu Thảo',
+                    copq: 'Cải tiến khay chống tĩnh điện giảm móp méo khi vận chuyển',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 8,
+                    group: 'Engineering',
+                    part: 'Process Eng',
+                    section: 'PE-02',
+                    name: 'Đặng Quốc Bảo',
+                    copq: 'Tối ưu thông số nhiệt lò hàn Reflow tiết kiệm điện & thiếc',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                },
+                {
+                    no: 9,
+                    group: 'Quality Control',
+                    part: 'OQC',
+                    section: 'OQC-01',
+                    name: 'Lý Mỹ Linh',
+                    copq: 'Chuẩn hóa checklist kiểm tra xuất hàng giảm khiếu nại khách hàng',
+                    totalPoint: 0,
+                    rank: '-',
+                    yearlyPoint: 0
+                }
+            ];
+
+            const SAMPLE_EVALUATIONS = [
+                {
+                    id: 'eval-seed-1',
+                    fullName: 'Nguyễn Văn An',
+                    department: 'Engineering',
+                    scores: { 1: 9, 2: 7, 3: 10, 4: 6, 5: 9, 6: 8, 7: 5, 8: 8, 9: 6 },
+                    submittedAt: '21/11/2026, 08:30:00'
+                },
+                {
+                    id: 'eval-seed-2',
+                    fullName: 'Trần Thị Bình',
+                    department: 'Quality Control',
+                    scores: { 1: 8, 2: 8, 3: 9, 4: 7, 5: 8, 6: 7, 7: 6, 8: 7, 9: 5 },
+                    submittedAt: '21/11/2026, 09:15:00'
+                },
+                {
+                    id: 'eval-seed-3',
+                    fullName: 'Lê Hoàng Cường',
+                    department: 'Manufacturing',
+                    scores: { 1: 9, 2: 6, 3: 10, 4: 6, 5: 8, 6: 7, 7: 6, 8: 7, 9: 5 },
+                    submittedAt: '21/11/2026, 10:05:00'
+                }
+            ];
+
+            // =================================================================
+            // 2. SANDBOX-SAFE STORAGE & CLONE HELPERS
+            // =================================================================
+            const memoryStorage = {};
+
+            function cloneData(obj) {
+                return JSON.parse(JSON.stringify(obj));
+            }
+
+            function safeStorageGet(key) {
+                try {
+                    const val = window.localStorage.getItem(key);
+                    return val !== null ? val : (Object.prototype.hasOwnProperty.call(memoryStorage, key) ? memoryStorage[key] : null);
+                } catch (e) {
+                    return Object.prototype.hasOwnProperty.call(memoryStorage, key) ? memoryStorage[key] : null;
+                }
+            }
+
+            function safeStorageSet(key, value) {
+                memoryStorage[key] = value;
+                try {
+                    window.localStorage.setItem(key, value);
+                } catch (e) {
+                    // Fallback to in-memory storage when localStorage is blocked
+                }
+            }
+
+            function safeStorageRemove(key) {
+                delete memoryStorage[key];
+                try {
+                    window.localStorage.removeItem(key);
+                } catch (e) {
+                    // Ignore sandboxed storage restriction
+                }
+            }
+
+            function hasCloudApi() {
+                return typeof API_URL === 'string' && API_URL.trim().indexOf('https://') === 0;
+            }
+
+            // =================================================================
+            // 3. APPLICATION STATE, SERVER SYNC & I18N HELPERS
+            // =================================================================
+            const state = {
+                lang: 'vi',
+                config: cloneData(DEFAULT_CONFIG),
+                projects: [],
+                evaluations: [],
+                currentScores: {},
+                lastSubmission: null
+            };
+
+            function t(key, vars) {
+                const dict = I18N[state.lang] || I18N.vi;
+                let str = dict[key] !== undefined ? dict[key] : (I18N.vi[key] || key);
+                if (vars) {
+                    Object.keys(vars).forEach(function (k) {
+                        str = str.split('{' + k + '}').join(String(vars[k]));
+                    });
+                }
+                return str;
+            }
+
+            function applyLanguage(lang) {
+                if (!I18N[lang]) lang = 'vi';
+                state.lang = lang;
+                safeStorageSet(STORAGE_KEYS.LANG, lang);
+                document.documentElement.lang = lang;
+
+                // Update dark-bg language switcher pills (Login & Admin header)
+                document.querySelectorAll('.lang-pill').forEach(function (btn) {
+                    const isSelected = btn.getAttribute('data-lang') === lang;
+                    if (isSelected) {
+                        btn.className = 'lang-pill px-2.5 py-1 rounded-full text-xs font-extrabold bg-white text-slate-900 shadow-sm transition flex items-center gap-1';
+                    } else {
+                        btn.className = 'lang-pill px-2.5 py-1 rounded-full text-xs font-semibold text-slate-300 hover:text-white transition flex items-center gap-1';
+                    }
+                });
+
+                // Update light-bg language switcher pills (Evaluator header)
+                document.querySelectorAll('.lang-pill-light').forEach(function (btn) {
+                    const isSelected = btn.getAttribute('data-lang') === lang;
+                    if (isSelected) {
+                        btn.className = 'lang-pill-light px-2 py-1 rounded-full text-[11px] font-extrabold bg-blue-600 text-white shadow-sm transition';
+                    } else {
+                        btn.className = 'lang-pill-light px-2 py-1 rounded-full text-[11px] font-semibold text-slate-600 hover:text-slate-900 transition';
+                    }
+                });
+
+                // Update static text elements
+                document.querySelectorAll('[data-i18n]').forEach(function (el) {
+                    const key = el.getAttribute('data-i18n');
+                    el.textContent = t(key);
+                });
+
+                // Update static HTML elements
+                document.querySelectorAll('[data-i18n-html]').forEach(function (el) {
+                    const key = el.getAttribute('data-i18n-html');
+                    el.innerHTML = t(key);
+                });
+
+                // Update input placeholders
+                document.querySelectorAll('[data-i18n-placeholder]').forEach(function (el) {
+                    const key = el.getAttribute('data-i18n-placeholder');
+                    el.setAttribute('placeholder', t(key));
+                });
+
+                // Re-render dynamic components without losing currentScores or inputs
+                renderEvaluatorCards();
+                updateEvaluatorProgress();
+                renderAdminDashboard();
+
+                if (state.lastSubmission) {
+                    const descEl = document.getElementById('submitted-desc');
+                    if (descEl) {
+                        descEl.innerHTML = t('submittedDescHtml', {
+                            name: escapeHtml(state.lastSubmission.fullName),
+                            dept: escapeHtml(state.lastSubmission.department)
+                        });
+                    }
+                }
+            }
+
+            async function syncFromServer() {
+                if (!hasCloudApi()) return;
+                try {
+                    const separator = API_URL.indexOf('?') === -1 ? '?' : '&';
+                    const res = await fetch(API_URL.trim() + separator + 'action=getAll&_ts=' + Date.now());
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    if (Array.isArray(data.projects) && data.projects.length > 0) {
+                        state.projects = data.projects.map(function (p, idx) {
+                            return normalizeProjectRecord(p, idx);
+                        });
+                        saveProjects();
+                    }
+
+                    if (Array.isArray(data.evaluations)) {
+                        state.evaluations = data.evaluations.map(function (ev) {
+                            let parsedScores = {};
+                            if (typeof ev.scores === 'object' && ev.scores !== null) {
+                                parsedScores = ev.scores;
+                            } else {
+                                const rawJson = ev.scoresJson || ev.scores || '{}';
+                                try {
+                                    parsedScores = JSON.parse(rawJson);
+                                } catch (e) {
+                                    parsedScores = {};
+                                }
+                            }
+                            return {
+                                id: String(ev.id || ''),
+                                fullName: String(ev.fullName || ''),
+                                department: String(ev.department || ''),
+                                scores: parsedScores,
+                                submittedAt: String(ev.submittedAt || '')
+                            };
+                        });
+                        saveEvaluations();
+                    }
+                } catch (err) {
+                    // Fallback to local state when network is unavailable
+                }
+            }
+
+            async function postToServer(payload) {
+                if (!hasCloudApi()) return null;
+                try {
+                    const res = await fetch(API_URL.trim(), {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) return null;
+                    return await res.json();
+                } catch (err) {
+                    return null;
+                }
+            }
+
+            function loadState() {
+                try {
+                    const savedLang = safeStorageGet(STORAGE_KEYS.LANG);
+                    state.lang = (savedLang && I18N[savedLang]) ? savedLang : 'vi';
+
+                    const rawConfig = safeStorageGet(STORAGE_KEYS.CONFIG);
+                    state.config = rawConfig ? { ...DEFAULT_CONFIG, ...JSON.parse(rawConfig) } : cloneData(DEFAULT_CONFIG);
+
+                    const rawProjects = safeStorageGet(STORAGE_KEYS.PROJECTS);
+                    if (rawProjects) {
+                        const parsed = JSON.parse(rawProjects);
+                        state.projects = Array.isArray(parsed) && parsed.length > 0
+                            ? parsed.map((p, idx) => normalizeProjectRecord(p, idx))
+                            : cloneData(SAMPLE_PROJECTS);
+                    } else {
+                        state.projects = cloneData(SAMPLE_PROJECTS);
+                        saveProjects();
+                    }
+
+                    const rawEvaluations = safeStorageGet(STORAGE_KEYS.EVALUATIONS);
+                    if (rawEvaluations) {
+                        const parsedEval = JSON.parse(rawEvaluations);
+                        state.evaluations = Array.isArray(parsedEval) ? parsedEval : (hasCloudApi() ? [] : cloneData(SAMPLE_EVALUATIONS));
+                    } else {
+                        state.evaluations = hasCloudApi() ? [] : cloneData(SAMPLE_EVALUATIONS);
+                        saveEvaluations();
+                    }
+
+                    if (!rawConfig) {
+                        saveConfig();
+                    }
+                } catch (err) {
+                    state.config = cloneData(DEFAULT_CONFIG);
+                    state.projects = cloneData(SAMPLE_PROJECTS);
+                    state.evaluations = hasCloudApi() ? [] : cloneData(SAMPLE_EVALUATIONS);
+                }
+            }
+
+            function normalizeProjectRecord(p, idx) {
+                return {
+                    no: p.no !== undefined && p.no !== '' && !Number.isNaN(Number(p.no)) ? Number(p.no) : idx + 1,
+                    group: String(p.group || 'General'),
+                    part: String(p.part || '-'),
+                    section: String(p.section || '-'),
+                    name: String(p.name || '-'),
+                    copq: String(p.copq || ('Dự án #' + (idx + 1))),
+                    totalPoint: Number(p.totalPoint) || 0,
+                    rank: p.rank !== undefined && p.rank !== '' ? p.rank : '-',
+                    yearlyPoint: Number(p.yearlyPoint) || 0
+                };
+            }
+
+            function saveConfig() {
+                safeStorageSet(STORAGE_KEYS.CONFIG, JSON.stringify(state.config));
+            }
+
+            function saveProjects() {
+                safeStorageSet(STORAGE_KEYS.PROJECTS, JSON.stringify(state.projects));
+            }
+
+            function saveEvaluations() {
+                safeStorageSet(STORAGE_KEYS.EVALUATIONS, JSON.stringify(state.evaluations));
+            }
+
+            function normalizeIdentity(str) {
+                return String(str || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            }
+
+            function escapeHtml(value) {
+                return String(value ?? '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+            }
+
+            // =================================================================
+            // 4. TOAST & CUSTOM MODAL (NO NATIVE ALERT / CONFIRM)
+            // =================================================================
+            function showToast(message, type) {
+                const container = document.getElementById('toast-container');
+                if (!container) return;
+
+                const toast = document.createElement('div');
+                const styles = {
+                    success: 'bg-emerald-600 text-white border-emerald-700',
+                    error: 'bg-rose-600 text-white border-rose-700',
+                    warning: 'bg-amber-500 text-slate-950 border-amber-600',
+                    info: 'bg-slate-900 text-white border-slate-800'
+                };
+                const icons = {
+                    success: 'fa-circle-check',
+                    error: 'fa-circle-xmark',
+                    warning: 'fa-triangle-exclamation',
+                    info: 'fa-circle-info'
+                };
+
+                const tone = type || 'info';
+                toast.className = 'pointer-events-auto flex items-center gap-2.5 px-4 py-3 rounded-2xl border shadow-xl text-sm font-semibold transition-all ' + (styles[tone] || styles.info);
+                toast.innerHTML = '<i class="fa-solid ' + (icons[tone] || icons.info) + ' text-base shrink-0"></i><span class="flex-1">' + escapeHtml(message) + '</span>';
+
+                container.appendChild(toast);
+
+                setTimeout(function () {
+                    toast.classList.add('opacity-0', 'translate-y-1');
+                    setTimeout(function () {
+                        if (toast.parentNode) toast.parentNode.removeChild(toast);
+                    }, 250);
+                }, 3000);
+            }
+
+            function showModal(options) {
+                return new Promise(function (resolve) {
+                    const modal = document.getElementById('app-modal');
+                    const titleEl = document.getElementById('modal-title');
+                    const msgEl = document.getElementById('modal-message');
+                    const badgeEl = document.getElementById('modal-badge');
+                    const iconEl = document.getElementById('modal-icon');
+                    const confirmBtn = document.getElementById('modal-confirm-btn');
+                    const cancelBtn = document.getElementById('modal-cancel-btn');
+
+                    const type = options.type || 'info';
+                    titleEl.textContent = options.title || t('modalNotice');
+                    msgEl.textContent = options.message || '';
+                    confirmBtn.textContent = options.confirmText || t('modalOk');
+                    cancelBtn.textContent = options.cancelText || t('modalCancel');
+
+                    const palette = {
+                        info: { badge: 'bg-blue-100 text-blue-600', icon: 'fa-circle-info', btn: 'bg-blue-600 hover:bg-blue-700 text-white' },
+                        success: { badge: 'bg-emerald-100 text-emerald-600', icon: 'fa-circle-check', btn: 'bg-emerald-600 hover:bg-emerald-700 text-white' },
+                        warning: { badge: 'bg-amber-100 text-amber-700', icon: 'fa-triangle-exclamation', btn: 'bg-amber-500 hover:bg-amber-600 text-slate-950' },
+                        error: { badge: 'bg-rose-100 text-rose-600', icon: 'fa-circle-xmark', btn: 'bg-rose-600 hover:bg-rose-700 text-white' }
+                    };
+                    const theme = palette[type] || palette.info;
+
+                    badgeEl.className = 'w-11 h-11 rounded-2xl flex items-center justify-center text-lg shrink-0 ' + theme.badge;
+                    iconEl.className = 'fa-solid ' + theme.icon;
+                    confirmBtn.className = 'px-5 py-2.5 rounded-xl text-sm font-bold shadow-sm transition ' + theme.btn;
+
+                    if (options.showCancel) {
+                        cancelBtn.classList.remove('hidden');
+                    } else {
+                        cancelBtn.classList.add('hidden');
+                    }
+
+                    modal.classList.remove('hidden');
+                    modal.classList.add('flex');
+
+                    function cleanup(result) {
+                        modal.classList.add('hidden');
+                        modal.classList.remove('flex');
+                        confirmBtn.removeEventListener('click', onConfirm);
+                        cancelBtn.removeEventListener('click', onCancel);
+                        resolve(result);
+                    }
+
+                    function onConfirm() { cleanup(true); }
+                    function onCancel() { cleanup(false); }
+
+                    confirmBtn.addEventListener('click', onConfirm);
+                    cancelBtn.addEventListener('click', onCancel);
+                });
+            }
+
+            // =================================================================
+            // 5. NAVIGATION & LOGIN HANDLERS (EVALUATOR & ADMIN)
+            // =================================================================
+            function showScreen(screenId) {
+                const screenIds = ['login-screen', 'evaluator-screen', 'submitted-screen', 'admin-screen'];
+                screenIds.forEach(function (id) {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    if (id === screenId) {
+                        el.classList.remove('hidden');
+                    } else {
+                        el.classList.add('hidden');
+                    }
+                });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+
+            function setLoginMode(mode) {
+                const evalTab = document.getElementById('tab-evaluator-btn');
+                const adminTab = document.getElementById('tab-admin-btn');
+                const evalForm = document.getElementById('evaluator-login-form');
+                const adminForm = document.getElementById('admin-login-form');
+
+                if (mode === 'evaluator') {
+                    evalTab.className = 'py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-blue-700 shadow-sm transition flex items-center justify-center gap-2';
+                    adminTab.className = 'py-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-2';
+                    evalForm.classList.remove('hidden');
+                    adminForm.classList.add('hidden');
+                } else {
+                    adminTab.className = 'py-2.5 px-3 rounded-xl text-sm font-bold bg-white text-emerald-700 shadow-sm transition flex items-center justify-center gap-2';
+                    evalTab.className = 'py-2.5 px-3 rounded-xl text-sm font-semibold text-slate-600 hover:text-slate-900 transition flex items-center justify-center gap-2';
+                    adminForm.classList.remove('hidden');
+                    evalForm.classList.add('hidden');
+                }
+            }
+
+            function syncPasswordDisplays() {
+                const settingsInput = document.getElementById('settings-common-password');
+                if (settingsInput) settingsInput.value = state.config.commonPassword;
+            }
+
+            async function handleEvaluatorLogin(event) {
+                if (event) event.preventDefault();
+                const inputEl = document.getElementById('common-password-input');
+                const entered = String(inputEl ? inputEl.value : '').trim();
+
+                if (!entered) {
+                    showModal({
+                        title: t('errNoCommonPassTitle'),
+                        message: t('errNoCommonPassMsg'),
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                if (entered !== String(state.config.commonPassword).trim()) {
+                    showModal({
+                        title: t('errWrongCommonPassTitle'),
+                        message: t('errWrongCommonPassMsg'),
+                        type: 'error'
+                    });
+                    return;
+                }
+
+
+                state.currentScores = {};
+                const nameInput = document.getElementById('eval-fullname');
+                const deptInput = document.getElementById('eval-department');
+                if (nameInput) nameInput.value = '';
+                if (deptInput) deptInput.value = '';
+                clearIdentityHighlights();
+
+                renderEvaluatorCards();
+                updateEvaluatorProgress();
+                sessionStorage.setItem('copq_login_role', 'evaluator');
+                showScreen('evaluator-screen');
+                showToast(t('toastEvalLoginSuccess'), 'success');
+
+            }
+
+            async function handleAdminLogin(event) {
+                if (event) event.preventDefault();
+                const inputEl = document.getElementById('admin-password-input');
+                const entered = String(inputEl ? inputEl.value : '').trim();
+
+                if (!entered) {
+                    showModal({
+                        title: t('errNoAdminPassTitle'),
+                        message: t('errNoAdminPassMsg'),
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                if (entered !== String(state.config.adminPassword).trim()) {
+                    showModal({
+                        title: t('errWrongAdminPassTitle'),
+                        message: t('errWrongAdminPassMsg'),
+                        type: 'error'
+                    });
+                    return;
+                }
+
+
+
+                renderAdminDashboard();
+                sessionStorage.setItem('copq_login_role', 'admin');
+                showScreen('admin-screen');
+                showToast(t('toastAdminLoginSuccess'), 'success');
+            }
+
+            function logoutToLogin() {
+                sessionStorage.removeItem('copq_login_role');
+                const commonInput = document.getElementById('common-password-input');
+                const adminInput = document.getElementById('admin-password-input');
+                if (commonInput) commonInput.value = '';
+                if (adminInput) adminInput.value = '';
+                syncPasswordDisplays();
+                showScreen('login-screen');
+            }
+
+            async function handleResetDemoData() {
+                const confirmed = await showModal({
+                    title: t('resetModalTitle'),
+                    message: t('resetModalMsg'),
+                    type: 'warning',
+                    showCancel: true,
+                    confirmText: t('resetModalConfirm'),
+                    cancelText: t('modalCancel')
+                });
+
+                if (!confirmed) return;
+
+                safeStorageRemove(STORAGE_KEYS.CONFIG);
+                safeStorageRemove(STORAGE_KEYS.PROJECTS);
+                safeStorageRemove(STORAGE_KEYS.EVALUATIONS);
+
+                state.config = cloneData(DEFAULT_CONFIG);
+                state.projects = cloneData(SAMPLE_PROJECTS);
+                state.evaluations = hasCloudApi() ? [] : cloneData(SAMPLE_EVALUATIONS);
+                state.currentScores = {};
+
+                saveConfig();
+                saveProjects();
+                saveEvaluations();
+                syncPasswordDisplays();
+
+                if (hasCloudApi()) {
+                    await postToServer({ action: 'clearEvaluations' });
+                    await postToServer({ action: 'saveProjects', projects: state.projects });
+                }
+
+                showToast(t('toastResetSuccess'), 'success');
+            }
+
+            // =================================================================
+            // 6. EVALUATOR CARDS, VALIDATION, DUPLICATE BLOCK & SEND
+            // =================================================================
+            function renderEvaluatorCards() {
+                const container = document.getElementById('project-cards-list');
+                if (!container) return;
+
+                if (!state.projects.length) {
+                    container.innerHTML =
+                        '<div class="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">' +
+                        '<i class="fa-solid fa-folder-open text-3xl text-slate-300 mb-2"></i>' +
+                        '<p class="font-semibold">' + escapeHtml(t('noProjectsInSystem')) + '</p>' +
+                        '</div>';
+                    return;
+                }
+
+                const orderedProjects = state.projects.slice().sort(function (a, b) {
+                    return Number(a.no) - Number(b.no);
+                });
+
+                container.innerHTML = orderedProjects.map(function (project) {
+
+                    const selectedScore = state.currentScores[project.no];
+                    const isScored = selectedScore !== undefined;
+
+                    let scoreButtonsHtml = '';
+                    for (let score = 1; score <= 10; score++) {
+                        const isActive = selectedScore === score;
+                        const btnClasses = isActive
+                            ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-600/25 scale-105'
+                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:border-blue-400 hover:bg-blue-50';
+
+                        scoreButtonsHtml +=
+                            '<button type="button" data-action="score" data-project-no="' + escapeHtml(project.no) + '" data-score="' + score + '" ' +
+                            'class="h-11 rounded-xl border font-extrabold text-sm transition-all active:scale-95 ' + btnClasses + '">' +
+                            score +
+                            '</button>';
+                    }
+
+                    const cardBorder = isScored ? 'border-emerald-200' : 'border-slate-200';
+                    const statusBadge = isScored
+                        ? '<span class="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 bg-emerald-100 text-emerald-700">' + escapeHtml(t('badgeScored', { score: selectedScore })) + '</span>'
+                        : '<span class="text-xs font-bold px-2.5 py-1 rounded-full shrink-0 bg-amber-100 text-amber-800">' + escapeHtml(t('badgeUnscored')) + '</span>';
+
+                    return (
+                        '<article id="project-card-' + escapeHtml(project.no) + '" class="bg-white rounded-2xl border ' + cardBorder + ' p-4 shadow-sm transition-all">' +
+                            '<div class="flex items-start justify-between gap-2 mb-2.5">' +
+                                '<div class="flex flex-wrap items-center gap-1.5">' +
+                                    '<span class="px-2.5 py-0.5 rounded-lg bg-slate-900 text-white text-xs font-extrabold">No. ' + escapeHtml(project.no) + '</span>' +
+                                    '<span class="px-2 py-0.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold">' + escapeHtml(project.group) + '</span>' +
+                                    '<span class="px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-semibold">' + escapeHtml(project.part) + '</span>' +
+                                    '<span class="px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-semibold">' + escapeHtml(project.section) + '</span>' +
+                                '</div>' +
+                                statusBadge +
+                            '</div>' +
+                            '<h3 class="text-base sm:text-lg font-extrabold text-slate-900 leading-snug mb-2.5">' +
+                                escapeHtml(project.copq) +
+                            '</h3>' +
+                            '<div class="flex items-center gap-2 bg-slate-50 rounded-xl px-3 py-2 mb-3.5 border border-slate-100 text-xs sm:text-sm">' +
+                                '<i class="fa-solid fa-user-tie text-blue-600"></i>' +
+                                '<span class="text-slate-500 font-medium">' + escapeHtml(t('projectOwnerLabel')) + '</span>' +
+                                '<span class="font-bold text-slate-800">' + escapeHtml(project.name) + '</span>' +
+                            '</div>' +
+                            '<div class="grid grid-cols-5 sm:grid-cols-10 gap-2">' +
+                                scoreButtonsHtml +
+                            '</div>' +
+                        '</article>'
+                    );
+                }).join('');
+            }
+
+            function handleProjectScoreClick(projectNo, score) {
+                state.currentScores[projectNo] = score;
+                renderEvaluatorCards();
+                updateEvaluatorProgress();
+            }
+
+            function updateEvaluatorProgress() {
+                const total = state.projects.length;
+                const scored = state.projects.filter(function (p) {
+                    return state.currentScores[p.no] !== undefined;
+                }).length;
+                const pct = total > 0 ? Math.round((scored / total) * 100) : 0;
+
+                const labelEl = document.getElementById('evaluator-progress-label');
+                const barEl = document.getElementById('evaluator-progress-bar');
+                const bottomEl = document.getElementById('bottom-status-text');
+
+                if (labelEl) labelEl.textContent = t('progressText', { scored: scored, total: total });
+                if (barEl) barEl.style.width = pct + '%';
+
+                if (bottomEl) {
+                    if (total === 0) {
+                        bottomEl.textContent = t('statusNoProjects');
+                        bottomEl.className = 'text-sm font-bold text-slate-500';
+                    } else if (scored === total) {
+                        bottomEl.textContent = t('statusReady', { scored: scored, total: total });
+                        bottomEl.className = 'text-sm font-bold text-emerald-600';
+                    } else {
+                        bottomEl.textContent = t('statusMissing', { missing: total - scored });
+                        bottomEl.className = 'text-sm font-bold text-amber-600';
+                    }
+                }
+            }
+
+            function clearIdentityHighlights() {
+                const nameInput = document.getElementById('eval-fullname');
+                const deptInput = document.getElementById('eval-department');
+                if (nameInput) nameInput.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200', 'shake-error');
+                if (deptInput) deptInput.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200', 'shake-error');
+            }
+
+            function highlightFieldError(el) {
+                if (!el) return;
+                el.classList.remove('shake-error');
+                void el.offsetWidth;
+                el.classList.add('border-rose-500', 'ring-2', 'ring-rose-200', 'shake-error');
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.focus();
+            }
+
+            function updateSendProgress(percent, message) {
+                const overlay = document.getElementById('send-progress-overlay');
+                const bar = document.getElementById('send-progress-bar');
+                const percentText = document.getElementById('send-progress-percent');
+                const messageText = document.getElementById('send-progress-message');
+
+                if (overlay) {
+                    overlay.classList.remove('hidden');
+                    overlay.classList.add('flex');
+                }
+
+                if (bar) {
+                    bar.style.width = percent + '%';
+                }
+
+                if (percentText) {
+                    percentText.textContent = percent + '%';
+                }
+
+                if (messageText) {
+                    messageText.textContent = message;
+                }
+            }
+
+            function hideSendProgress() {
+                const overlay = document.getElementById('send-progress-overlay');
+
+                if (overlay) {
+                    overlay.classList.add('hidden');
+                    overlay.classList.remove('flex');
+                }
+            }
+
+            async function handleSendEvaluation() {
+                clearIdentityHighlights();
+
+                const nameInput = document.getElementById('eval-fullname');
+                const deptInput = document.getElementById('eval-department');
+                const rawName = String(nameInput ? nameInput.value : '').trim();
+                const rawDept = String(deptInput ? deptInput.value : '').trim();
+
+                if (!rawName) {
+                    highlightFieldError(nameInput);
+                    await showModal({
+                        title: t('errNoNameTitle'),
+                        message: t('errNoNameMsg'),
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                if (!rawDept) {
+                    highlightFieldError(deptInput);
+                    await showModal({
+                        title: t('errNoDeptTitle'),
+                        message: t('errNoDeptMsg'),
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                if (!state.projects.length) {
+                    await showModal({
+                        title: t('errNoProjectsTitle'),
+                        message: t('errNoProjectsMsg'),
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                // Validate 100% projects scored
+                let firstMissingCard = null;
+                let firstMissingProject = null;
+
+                state.projects.forEach(function (project) {
+                    const card = document.getElementById('project-card-' + project.no);
+                    if (state.currentScores[project.no] === undefined) {
+                        if (!firstMissingCard && card) {
+                            firstMissingCard = card;
+                            firstMissingProject = project;
+                        }
+                        if (card) {
+                            card.classList.remove('shake-error');
+                            void card.offsetWidth;
+                            card.classList.add('border-rose-500', 'ring-2', 'ring-rose-200', 'shake-error');
+                        }
+                    } else if (card) {
+                        card.classList.remove('border-rose-500', 'ring-2', 'ring-rose-200', 'shake-error');
+                    }
+                });
+
+                if (firstMissingCard) {
+                    firstMissingCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    await showModal({
+                        title: t('errIncompleteTitle'),
+                        message: t('errIncompleteMsg', { project: firstMissingProject.copq }),
+                        type: 'warning'
+                    });
+                    return;
+                }
+
+                const sendBtn = document.getElementById('send-evaluation-btn');
+                if (sendBtn) sendBtn.disabled = true;
+
+                try {
+                    updateSendProgress(10, 'Đang bắt đầu gửi đánh giá...');
+                    // Không kiểm tra trùng tên và phòng ban
+                    updateSendProgress(25, 'Đang chuẩn bị thông tin...');
+
+                    updateSendProgress(45, 'Thông tin hợp lệ. Đang chuẩn bị gửi...');
+                    
+                    const nowStr = new Date().toLocaleString('vi-VN');
+                    const scoresSnapshot = {};
+                    state.projects.forEach(function (p) {
+                        scoresSnapshot[p.no] = Number(state.currentScores[p.no]);
+                    });
+
+                    const newEvaluation = {
+                        id: 'eval-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+                        fullName: rawName,
+                        department: rawDept,
+                        scores: scoresSnapshot,
+                        submittedAt: nowStr
+                    };
+
+                    let serverResp = null;
+
+                    if (hasCloudApi()) {
+                        updateSendProgress(65, 'Đang gửi dữ liệu lên máy chủ...');
+
+                        serverResp = await postToServer({
+                            action: 'addEvaluation',
+                            id: newEvaluation.id,
+                            fullName: newEvaluation.fullName,
+                            department: newEvaluation.department,
+                            scores: newEvaluation.scores,
+                            submittedAt: newEvaluation.submittedAt
+                        });
+
+
+
+                    }
+
+
+                    updateSendProgress(90, 'Đang hoàn tất lưu dữ liệu...');
+
+                    // XÁC NHẬN KẾT QUẢ TỪ GOOGLE APPS SCRIPT
+                    if (!serverResp || serverResp.ok !== true) {
+                        console.error('Google Apps Script response:', serverResp);
+
+                        showToast(
+                            'Gửi dữ liệu thất bại. Không nhận được xác nhận từ Google Sheets. Vui lòng thử lại.',
+                            'error'
+                        );
+
+                        return;
+                    }
+
+                    state.evaluations.push(newEvaluation);
+                    saveEvaluations();
+
+                    state.lastSubmission = {
+                        fullName: rawName,
+                        department: rawDept,
+                        count: state.projects.length,
+                        submittedAt: nowStr
+                    };
+
+                    const descEl = document.getElementById('submitted-desc');
+                    if (descEl) {
+                        descEl.innerHTML = t('submittedDescHtml', {
+                            name: escapeHtml(rawName),
+                            dept: escapeHtml(rawDept)
+                        });
+                    }
+                    document.getElementById('confirmed-count').textContent = state.projects.length + ' / ' + state.projects.length;
+                    document.getElementById('confirmed-time').textContent = nowStr;
+
+
+                    state.currentScores = {};
+
+                    updateSendProgress(100, 'Gửi đánh giá thành công!');
+
+                    await new Promise(resolve => setTimeout(resolve, 400));
+
+                    hideSendProgress();
+
+                    showScreen('submitted-screen');
+                    showToast(t('toastSendSuccess'), 'success');
+
+
+                } finally {
+                    hideSendProgress();
+
+                    if (sendBtn) sendBtn.disabled = false;
+                }
+            }
+
+            // =================================================================
+            // 7. ADMIN DASHBOARD, RANKING & YEARLY POINT CALCULATION
+            // =================================================================
+            function renderAdminDashboard() {
+                syncPasswordDisplays();
+                updateAdminKpis();
+                renderAdminResultsTable();
+                renderAdminEvaluationsTable();
+            }
+
+            function updateAdminKpis() {
+                document.getElementById('admin-kpi-projects').textContent = state.projects.length;
+                document.getElementById('admin-kpi-evaluators').textContent = state.evaluations.length;
+
+                const statusEl = document.getElementById('admin-kpi-status');
+                if (state.config.resultsUpdated) {
+                    statusEl.textContent = t('statusUpdated');
+                    statusEl.className = 'text-sm sm:text-base font-extrabold text-emerald-600 mt-2';
+                } else {
+                    statusEl.textContent = t('statusNotUpdated');
+                    statusEl.className = 'text-sm sm:text-base font-extrabold text-amber-600 mt-2';
+                }
+            }
+
+            function renderAdminResultsTable() {
+                const tbody = document.getElementById('admin-results-tbody');
+                if (!tbody) return;
+
+                if (!state.projects.length) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="9" class="py-10 text-center text-slate-400 font-medium">' +
+                        escapeHtml(t('emptyAdminProjects')) +
+                        '</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = state.projects.map(function (p) {
+                    let rankBadge = '<span class="text-slate-400 font-bold">-</span>';
+                    if (p.rank === 1 || p.rank === 'Rank 1') {
+                        rankBadge = '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-300 text-slate-950 font-extrabold text-xs shadow-sm"><i class="fa-solid fa-crown text-[10px]"></i> Rank 1</span>';
+                    } else if (p.rank === 2 || p.rank === 'Rank 2') {
+                        rankBadge = '<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-200 text-slate-800 font-extrabold text-xs border border-slate-300">Rank 2</span>';
+                    } else if (p.rank === 3 || p.rank === 'Rank 3') {
+                        rankBadge = '<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-orange-100 text-orange-800 font-extrabold text-xs border border-orange-300">Rank 3</span>';
+                    } else if (p.rank === 4 || p.rank === 'Rank 4') {
+                        rankBadge = '<span class="inline-flex items-center px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-xs">Rank 4</span>';
+                    }
+
+                    return (
+                        '<tr class="hover:bg-slate-50 transition">' +
+                            '<td class="py-3 px-3 text-center font-bold text-slate-700">' + escapeHtml(p.no) + '</td>' +
+                            '<td class="py-3 px-3 text-slate-600 text-xs font-medium">' + escapeHtml(p.group) + '</td>' +
+                            '<td class="py-3 px-3 text-slate-600 text-xs font-medium">' + escapeHtml(p.part) + '</td>' +
+                            '<td class="py-3 px-3 text-slate-600 text-xs font-medium">' + escapeHtml(p.section) + '</td>' +
+                            '<td class="py-3 px-3 font-semibold text-slate-800 text-xs sm:text-sm">' + escapeHtml(p.name) + '</td>' +
+                            '<td class="py-3 px-3 font-bold text-slate-900 bg-blue-50/30">' + escapeHtml(p.copq) + '</td>' +
+                            '<td class="py-3 px-3 text-center font-extrabold text-emerald-700 bg-emerald-50/40">' + Number(p.totalPoint || 0) + '</td>' +
+                            '<td class="py-3 px-3 text-center bg-amber-50/40">' + rankBadge + '</td>' +
+                            '<td class="py-3 px-3 text-center font-extrabold text-indigo-700 bg-indigo-50/40 font-mono">' + Number(p.yearlyPoint || 0).toLocaleString('en-US') + '</td>' +
+                        '</tr>'
+                    );
+                }).join('');
+            }
+            function getDuplicateEvaluationIndexes() {
+                const groups = new Map();
+                const duplicateIndexes = new Set();
+
+                function normalizeIdentity(value) {
+                    return String(value || '')
+                        .normalize('NFC')
+                        .trim()
+                        .replace(/\s+/g, ' ')
+                        .toLocaleLowerCase();
+                }
+
+                state.evaluations.forEach(function (ev, index) {
+                    const fullName = normalizeIdentity(ev.fullName);
+                    const department = normalizeIdentity(ev.department);
+
+                    // Không nhận diện bản ghi thiếu Họ tên hoặc Bộ phận
+                    if (!fullName || !department) return;
+
+                    const key = JSON.stringify([fullName, department]);
+
+                    if (!groups.has(key)) {
+                        groups.set(key, []);
+                    }
+
+                    groups.get(key).push(index);
+                });
+
+                groups.forEach(function (indexes) {
+                    if (indexes.length > 1) {
+                        indexes.forEach(function (index) {
+                            duplicateIndexes.add(index);
+                        });
+                    }
+                });
+
+                return duplicateIndexes;
+            }
+
+            function renderAdminEvaluationsTable() {
+                const tbody = document.getElementById('admin-evaluations-tbody');
+                if (!tbody) return;
+
+                if (!state.evaluations.length) {
+                    tbody.innerHTML =
+                        '<tr><td colspan="5" class="py-8 text-center text-slate-400 font-medium">' +
+                        escapeHtml(t('emptyAdminEvaluations')) +
+                        '</td></tr>';
+                    return;
+                }
+
+                const duplicateIndexes = getDuplicateEvaluationIndexes();
+
+                tbody.innerHTML = state.evaluations.map(function (ev, idx) {
+                    const isDuplicate = duplicateIndexes.has(idx);
+
+                    const rowClass = isDuplicate
+                        ? 'bg-rose-50 hover:bg-rose-100 transition'
+                        : 'hover:bg-slate-50 transition';
+
+                    const identityClass = isDuplicate
+                        ? 'text-rose-700 font-extrabold'
+                        : 'text-slate-900 font-bold';
+
+                    const duplicateLabel = isDuplicate
+                        ? '<span class="ml-2 inline-block rounded-full bg-rose-200 px-2 py-0.5 text-[10px] font-extrabold text-rose-800">TRÙNG</span>'
+                        : '';
+
+                    return (
+                        '<tr class="' + rowClass + '">' +
+                            '<td class="py-3 px-4 font-bold text-slate-500">' + (idx + 1) + '</td>' +
+                            '<td class="py-3 px-4 ' + identityClass + '">' +
+                                escapeHtml(ev.fullName) + duplicateLabel +
+                            '</td>' +
+                            '<td class="py-3 px-4 ' + (isDuplicate ? 'text-rose-700 font-extrabold' : 'text-slate-700 font-medium') + '">' +
+                                escapeHtml(ev.department) +
+                            '</td>' +
+                            '<td class="py-3 px-4 text-slate-500 text-xs font-mono">' + escapeHtml(ev.submittedAt) + '</td>' +
+                            '<td class="py-3 px-4 text-right">' +
+                                '<button type="button" data-action="delete-eval" data-eval-id="' + escapeHtml(ev.id) + '" ' +
+                                'class="px-3 py-1.5 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 transition">' +
+                                escapeHtml(t('btnDelete')) +
+                                '</button>' +
+                            '</td>' +
+                        '</tr>'
+                    );
+                }).join('');
+            }
+
+            /**
+             * UPDATE RESULT:
+             * - Pulls latest submissions from server first
+             * - Total point = sum of evaluator scores for each project
+             * - Yearly Point = Math.round((Total point / (Total evaluators * 10)) * 100) (0 if total evaluators is 0)
+             * - Rank: #1 -> Rank 1; #2, #3, #4, #5 -> Rank 2; #6, #7, #8, #9 -> Rank 3; #10+ -> Rank 4
+             */
+            async function handleUpdateResult() {
+                const updateBtn = document.getElementById('update-result-btn');
+                if (updateBtn) updateBtn.disabled = true;
+
+                try {
+                    await syncFromServer();
+
+                    // Cập nhật danh sách Admin sau khi đồng bộ dữ liệu mới
+                    renderAdminDashboard();
+
+                    // Kiểm tra bản ghi trùng Họ tên + Bộ phận
+                    const duplicateIndexes = getDuplicateEvaluationIndexes();
+
+                    if (duplicateIndexes.size > 0) {
+                        const shouldContinue = await showModal({
+                            title: 'Phát hiện bản ghi đánh giá trùng',
+                            message:
+                                'Hệ thống phát hiện ' + duplicateIndexes.size +
+                                ' bản ghi thuộc nhóm trùng Họ tên + Bộ phận. ' +
+                                'Các dòng trùng đã được tô đỏ trong danh sách. ' +
+                                'Bạn có thể hủy để kiểm tra và xóa bản ghi không cần giữ. ' +
+                                'Nếu tiếp tục, tất cả bản ghi đang giữ lại sẽ được tính vào kết quả.',
+                            type: 'warning',
+                            showCancel: true,
+                            confirmText: 'Tiếp tục tính',
+                            cancelText: 'Xem lại / Hủy'
+                        });
+
+                        // Admin chọn xem lại thì dừng, không tính kết quả
+                        if (!shouldContinue) {
+                            return;
+                        }
+                    }
+
+                    if (!state.projects.length) {
+                        showToast(t('toastNoProjectsCalc'), 'warning');
+                        return;
+                    }
+
+                    const totalEvaluators = state.evaluations.length;
+
+                    state.projects.forEach(function (proj) {
+                        if (totalEvaluators === 0) {
+                            proj.totalPoint = 0;
+                            proj.yearlyPoint = 0;
+                            proj.rank = '-';
+                            return;
+                        }
+
+                        let sumScore = 0;
+                        state.evaluations.forEach(function (ev) {
+                            if (ev.scores && ev.scores[proj.no] !== undefined) {
+                                const val = Number(ev.scores[proj.no]);
+                                if (!Number.isNaN(val)) {
+                                    sumScore += val;
+                                }
+                            }
+                        });
+
+                        proj.totalPoint = sumScore;
+                        proj.yearlyPoint = Math.round((sumScore / (totalEvaluators * 10)) * 100);
+                    });
+
+                    if (totalEvaluators === 0) {
+                        state.config.resultsUpdated = false;
+                        saveProjects();
+                        saveConfig();
+                        renderAdminDashboard();
+                        await postToServer({ action: 'saveProjects', projects: state.projects });
+                        showToast(t('toastZeroEvaluators'), 'warning');
+                        return;
+                    }
+
+                    const sorted = state.projects.slice().sort(function (a, b) {
+                        if (b.totalPoint !== a.totalPoint) {
+                            return b.totalPoint - a.totalPoint;
+                        }
+                        return Number(a.no) - Number(b.no);
+                    });
+
+                    sorted.forEach(function (proj, idx) {
+                        const pos = idx + 1;
+                        if (pos === 1) {
+                            proj.rank = 'Rank 1';
+                        } else if (pos >= 2 && pos <= 5) {
+                            proj.rank = 'Rank 2';
+                        } else if (pos >= 6 && pos <= 20) {
+                            proj.rank = 'Rank 3';
+                        } else {
+                            proj.rank = 'Rank 4';
+                        }
+                    });
+
+                    state.projects = sorted;
+                    state.config.resultsUpdated = true;
+                    saveProjects();
+                    saveConfig();
+                    renderAdminDashboard();
+                    await postToServer({ action: 'saveProjects', projects: state.projects });
+
+                    showToast(t('toastUpdateSuccess', { count: totalEvaluators }), 'success');
+                } finally {
+                    if (updateBtn) updateBtn.disabled = false;
+                }
+            }
+
+            function handleSaveCommonPassword() {
+                const input = document.getElementById('settings-common-password');
+                const nextPass = String(input ? input.value : '').trim();
+
+                if (!nextPass) {
+                    showToast(t('toastEmptyCommonPass'), 'warning');
+                    return;
+                }
+
+                state.config.commonPassword = nextPass;
+                saveConfig();
+                syncPasswordDisplays();
+                showToast(t('toastSavedCommonPass', { pass: nextPass }), 'success');
+            }
+
+            async function handleDeleteEvaluation(evalId) {
+                const confirmed = await showModal({
+                    title: t('delEvalTitle'),
+                    message: t('delEvalMsg'),
+                    type: 'warning',
+                    showCancel: true,
+                    confirmText: t('delEvalConfirm'),
+                    cancelText: t('modalCancel')
+                });
+
+                if (!confirmed) return;
+
+                // Kiểm tra phiếu cần xóa có tồn tại không
+                const evaluationExists = state.evaluations.some(function (ev) {
+                    return ev.id === evalId;
+                });
+
+                if (!evaluationExists) {
+                    showToast('Không tìm thấy phiếu đánh giá cần xóa.', 'warning');
+                    return;
+                }
+
+                // Gửi yêu cầu xóa lên Google Sheets trước
+                const serverResp = await postToServer({
+                    action: 'deleteEvaluation',
+                    id: evalId
+                });
+
+                // Chỉ xóa local khi máy chủ xác nhận
+                if (!serverResp || serverResp.ok !== true) {
+                    console.error('Google Sheets deleteEvaluation response:', serverResp);
+
+                    await showModal({
+                        title: 'Xóa dữ liệu thất bại',
+                        message: 'Google Sheets chưa xác nhận xóa phiếu đánh giá. Dữ liệu vẫn được giữ nguyên. Vui lòng thử lại.',
+                        type: 'error'
+                    });
+
+                    return;
+                }
+
+                // Máy chủ đã xác nhận xóa thành công
+                state.evaluations = state.evaluations.filter(function (ev) {
+                    return ev.id !== evalId;
+                });
+
+                saveEvaluations();
+                renderAdminDashboard();
+
+                showToast(t('toastDeletedEval'), 'success');
+            }
+
+            async function handleClearAllEvaluations() {
+                if (!state.evaluations.length) {
+                    showToast(t('toastEvalsAlreadyEmpty'), 'info');
+                    return;
+                }
+
+                const confirmed = await showModal({
+                    title: t('clearAllTitle'),
+                    message: t('clearAllMsg'),
+                    type: 'error',
+                    showCancel: true,
+                    confirmText: t('clearAllConfirm'),
+                    cancelText: t('modalCancel')
+                });
+
+                if (!confirmed) return;
+
+                state.evaluations = [];
+                state.projects.forEach(function (p) {
+                    p.totalPoint = 0;
+                    p.rank = '-';
+                    p.yearlyPoint = 0;
+                });
+                state.config.resultsUpdated = false;
+
+                saveEvaluations();
+                saveProjects();
+                saveConfig();
+                renderAdminDashboard();
+                await postToServer({ action: 'clearEvaluations' });
+                await postToServer({ action: 'saveProjects', projects: state.projects });
+                showToast(t('toastClearedAll'), 'success');
+            }
+
+            // =================================================================
+            // 8. EXCEL IMPORT & EXPORT (SHEETJS - EXACT 9-COLUMN STRUCTURE)
+            // =================================================================
+            function getExcelColumnWidths() {
+                return [
+                    { wch: 7 },  // A: No
+                    { wch: 18 }, // B: Group
+                    { wch: 18 }, // C: Part
+                    { wch: 14 }, // D: Section
+                    { wch: 24 }, // E: Name (Người phụ trách)
+                    { wch: 46 }, // F: COPQ (Tên dự án)
+                    { wch: 14 }, // G: Total point
+                    { wch: 12 }, // H: Rank
+                    { wch: 15 }  // I: Yearly Point
+                ];
+            }
+
+            function handleDownloadSampleExcel() {
+                if (typeof XLSX === 'undefined') {
+                    showToast(t('toastXlsxNotReady'), 'error');
+                    return;
+                }
+
+                const rows = SAMPLE_PROJECTS.map(function (p) {
+                    return {
+                        'No': p.no,
+                        'Group': p.group,
+                        'Part': p.part,
+                        'Section': p.section,
+                        'Name': p.name,
+                        'COPQ': p.copq,
+                        'Total point': '',
+                        'Rank': '',
+                        'Yearly Point': ''
+                    };
+                });
+
+                const ws = XLSX.utils.json_to_sheet(rows, { header: EXCEL_COLUMNS });
+                ws['!cols'] = getExcelColumnWidths();
+
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'COPQ_Projects');
+                XLSX.writeFile(wb, 'COPQ_Template_9Cols.xlsx');
+                showToast(t('toastSampleDownloaded'), 'success');
+            }
+
+            function handleExcelImport(event) {
+                const file = event.target && event.target.files ? event.target.files[0] : null;
+                if (!file) return;
+
+                if (typeof XLSX === 'undefined') {
+                    showToast(t('toastXlsxNotReady'), 'error');
+                    event.target.value = '';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onload = async function (e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                        const matrix = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+
+                        if (!matrix || matrix.length < 2) {
+                            await showModal({
+                                title: t('errEmptyExcelTitle'),
+                                message: t('errEmptyExcelMsg'),
+                                type: 'warning'
+                            });
+                            return;
+                        }
+
+                        const headers = matrix[0].map(function (h) {
+                            return String(h || '').trim().toLowerCase();
+                        });
+
+                        const dataRows = matrix.slice(1).filter(function (row) {
+                            return Array.isArray(row) && row.some(function (cell) {
+                                return String(cell ?? '').trim() !== '';
+                            });
+                        });
+
+                        if (!dataRows.length) {
+                            await showModal({
+                                title: t('errInvalidExcelTitle'),
+                                message: t('errInvalidExcelMsg'),
+                                type: 'warning'
+                            });
+                            return;
+                        }
+
+                        function locateCol(names, fallbackIndex) {
+                            const found = headers.findIndex(function (h) {
+                                return names.indexOf(h) !== -1;
+                            });
+                            return found !== -1 ? found : fallbackIndex;
+                        }
+
+                        const idxNo = locateCol(['no', 'stt', 'id'], 0);
+                        const idxGroup = locateCol(['group'], 1);
+                        const idxPart = locateCol(['part'], 2);
+                        const idxSection = locateCol(['section'], 3);
+                        const idxName = locateCol(['name', 'owner', 'người phụ trách'], 4);
+                        const idxCopq = locateCol(['copq', 'project', 'tên dự án'], 5);
+                        const idxTotal = locateCol(['total point', 'total'], 6);
+                        const idxRank = locateCol(['rank'], 7);
+                        const idxYearly = locateCol(['yearly point', 'yearly'], 8);
+
+                        const imported = dataRows.map(function (row, idx) {
+                            const rawNo = row[idxNo];
+                            const parsedNo = String(rawNo ?? '').trim() !== '' && !Number.isNaN(Number(rawNo))
+                                ? Number(rawNo)
+                                : idx + 1;
+
+                            return {
+                                no: parsedNo,
+                                group: String(row[idxGroup] ?? '').trim() || 'General',
+                                part: String(row[idxPart] ?? '').trim() || '-',
+                                section: String(row[idxSection] ?? '').trim() || '-',
+                                name: String(row[idxName] ?? '').trim() || '-',
+                                copq: String(row[idxCopq] ?? '').trim() || ('Dự án #' + (idx + 1)),
+                                totalPoint: Number(String(row[idxTotal] ?? 0).replace(/[^0-9.-]+/g, '')) || 0,
+                                rank: String(row[idxRank] ?? '').trim() || '-',
+                                yearlyPoint: Number(String(row[idxYearly] ?? 0).replace(/[^0-9.-]+/g, '')) || 0
+                            };
+                        });
+
+                        // Lưu dữ liệu lên Google Sheets trước
+                        const serverResp = await postToServer({
+                            action: 'saveProjects',
+                            projects: imported
+                        });
+
+                        // Chỉ tiếp tục nếu Google Sheets xác nhận thành công
+                        if (!serverResp || serverResp.ok !== true) {
+                            console.error('Google Sheets saveProjects response:', serverResp);
+
+                            await showModal({
+                                title: 'Lưu dữ liệu thất bại',
+                                message: 'Google Sheets chưa xác nhận lưu dữ liệu Excel. Vui lòng kiểm tra kết nối và thử lại.',
+                                type: 'error'
+                            });
+
+                            return;
+                        }
+
+                        // Máy chủ đã xác nhận: cập nhật giao diện và dữ liệu local
+                        state.projects = imported;
+                        state.currentScores = {};
+                        state.config.resultsUpdated = false;
+
+                        saveProjects();
+                        saveConfig();
+                        renderAdminDashboard();
+
+                        showToast(
+                            t('toastImportedExcel', { count: imported.length }),
+                            'success'
+                        );
+
+                    } catch (err) {
+                        await showModal({
+                            title: t('errReadExcelTitle'),
+                            message: t('errReadExcelMsg'),
+                            type: 'error'
+                        });
+                    } finally {
+                        event.target.value = '';
+                    }
+                };
+
+                reader.readAsArrayBuffer(file);
+            }
+
+            function handleExportExcel() {
+                if (!state.projects.length) {
+                    showToast(t('toastNoExportData'), 'warning');
+                    return;
+                }
+
+                if (typeof XLSX === 'undefined') {
+                    showToast(t('toastXlsxNotReady'), 'error');
+                    return;
+                }
+
+                const exportRows = state.projects.map(function (p) {
+                    return {
+                        'No': p.no,
+                        'Group': p.group,
+                        'Part': p.part,
+                        'Section': p.section,
+                        'Name': p.name,
+                        'COPQ': p.copq,
+                        'Total point': Number(p.totalPoint) || 0,
+                        'Rank': p.rank || '-',
+                        'Yearly Point': Number(p.yearlyPoint) || 0
+                    };
+                });
+
+                const ws = XLSX.utils.json_to_sheet(exportRows, { header: EXCEL_COLUMNS });
+                ws['!cols'] = getExcelColumnWidths();
+
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, 'COPQ_Ranking_Result');
+                const dateTag = new Date().toISOString().slice(0, 10);
+                XLSX.writeFile(wb, 'COPQ_Evaluation_Result_' + dateTag + '.xlsx');
+                showToast(t('toastExportedExcel'), 'success');
+            }
+
+            // =================================================================
+            // 9. EVENT BINDINGS & STARTUP
+            // =================================================================
+            function bindEvents() {
+                // Password visibility toggle
+                document.querySelectorAll('.password-toggle').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const targetId = btn.getAttribute('data-target');
+                        const input = document.getElementById(targetId);
+                        const icon = btn.querySelector('i');
+
+                        if (!input || !icon) return;
+
+                        const isPassword = input.type === 'password';
+
+                        input.type = isPassword ? 'text' : 'password';
+
+                        icon.classList.toggle('fa-eye', !isPassword);
+                        icon.classList.toggle('fa-eye-slash', isPassword);
+
+                        btn.setAttribute('aria-pressed', String(isPassword));
+                        btn.setAttribute(
+                            'aria-label',
+                            isPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'
+                        );
+                    });
+                });
+                // Language switcher buttons across all screens
+                document.querySelectorAll('button[data-action="set-lang"]').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        const lang = btn.getAttribute('data-lang');
+                        if (lang) {
+                            applyLanguage(lang);
+                        }
+                    });
+                });
+
+                // Login mode tabs
+                document.getElementById('tab-evaluator-btn').addEventListener('click', function () {
+                    setLoginMode('evaluator');
+                });
+                document.getElementById('tab-admin-btn').addEventListener('click', function () {
+                    setLoginMode('admin');
+                });
+
+                // Login forms & submit buttons
+                document.getElementById('evaluator-login-form').addEventListener('submit', handleEvaluatorLogin);
+                document.getElementById('admin-login-form').addEventListener('submit', handleAdminLogin);
+
+
+                // Evaluator view actions
+                document.getElementById('evaluator-logout-btn').addEventListener('click', logoutToLogin);
+                document.getElementById('confirmed-back-login-btn').addEventListener('click', logoutToLogin);
+                document.getElementById('send-evaluation-btn').addEventListener('click', handleSendEvaluation);
+
+                // Event delegation for score buttons inside project cards
+                document.getElementById('project-cards-list').addEventListener('click', function (e) {
+                    const btn = e.target.closest('button[data-action="score"]');
+                    if (!btn) return;
+                    const projNo = Number(btn.getAttribute('data-project-no'));
+                    const score = Number(btn.getAttribute('data-score'));
+                    if (!Number.isNaN(projNo) && !Number.isNaN(score)) {
+                        handleProjectScoreClick(projNo, score);
+                    }
+                });
+
+                // Admin view actions
+                document.getElementById('admin-logout-btn').addEventListener('click', logoutToLogin);
+                document.getElementById('download-sample-excel-btn').addEventListener('click', handleDownloadSampleExcel);
+                document.getElementById('excel-file-input').addEventListener('change', handleExcelImport);
+                document.getElementById('save-common-password-btn').addEventListener('click', handleSaveCommonPassword);
+                document.getElementById('update-result-btn').addEventListener('click', handleUpdateResult);
+                document.getElementById('export-excel-btn').addEventListener('click', handleExportExcel);
+                document.getElementById('clear-all-evaluations-btn').addEventListener('click', handleClearAllEvaluations);
+
+                // Event delegation for deleting individual evaluation rows
+                document.getElementById('admin-evaluations-tbody').addEventListener('click', function (e) {
+                    const btn = e.target.closest('button[data-action="delete-eval"]');
+                    if (!btn) return;
+                    const evalId = btn.getAttribute('data-eval-id');
+                    if (evalId) {
+                        handleDeleteEvaluation(evalId);
+                    }
+                });
+            }
+
+            async function init() {
+                loadState();
+                syncPasswordDisplays();
+                bindEvents();
+                applyLanguage(state.lang);
+                
+
+                // Hiển thị dữ liệu đã lưu trước
+                renderEvaluatorCards();
+                updateEvaluatorProgress();
+                renderAdminDashboard();
+                // Khôi phục màn hình theo trạng thái đăng nhập của tab
+                const savedRole = sessionStorage.getItem('copq_login_role');
+
+                if (savedRole === 'evaluator') {
+                    showScreen('evaluator-screen');
+                } else if (savedRole === 'admin') {
+                    showScreen('admin-screen');
+                } else {
+                    showScreen('login-screen');
+                }
+
+                // Đồng bộ Google Sheets ở chế độ nền
+                syncFromServer().then(function () {
+                    syncPasswordDisplays();
+                    renderEvaluatorCards();
+                    updateEvaluatorProgress();
+                    renderAdminDashboard();
+                });
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
+</body>
+</html>
